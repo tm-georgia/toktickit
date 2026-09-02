@@ -52,6 +52,38 @@ app.get("/api/categories", async (_req: Request, res: Response) => {
     res.status(500).json({ error: "Failed to fetch categories" });
   }
 });
+
+// ---------------------------------------------------------------------------
+// Development Requester list
+// ---------------------------------------------------------------------------
+// GET /api/requesters
+// Returns active development requesters with id, name, and email.
+// ---------------------------------------------------------------------------
+
+app.get("/api/requesters", async (_req: Request, res: Response) => {
+  try {
+    const prisma = getPrisma();
+
+    const requesters = await prisma.developmentRequester.findMany({
+      where: {
+        isActive: true,
+      },
+      orderBy: {
+        id: "asc",
+      },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+      },
+    });
+
+    res.status(200).json(requesters);
+  } catch (error) {
+    console.error("Failed to fetch requesters:", error);
+    res.status(500).json({ error: "REQUESTERS_UNAVAILABLE" });
+  }
+});
 // ---------------------------------------------------------------------------
 
 export default app;
