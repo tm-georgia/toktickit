@@ -1,9 +1,7 @@
 import { getPrisma } from "../src/prisma.js";
 
-// Issue 3 — seed the four supported categories.
-// The four names are: Account and Access, Hardware, Software, Network.
-// Requirement: running the seed twice must NOT create duplicates.
-// Hint: prisma.category.upsert({ where:{name}, update:{}, create:{name} }).
+// Seed categories and development requesters.
+// Running the seed multiple times must NOT create duplicates.
 async function main() {
   const prisma = getPrisma();
 
@@ -22,7 +20,33 @@ async function main() {
     });
   }
 
-  console.log("Categories seeded successfully.");
+  const developmentRequesters = [
+    {
+      name: "Aung Aung",
+      email: "aung@example.com",
+    },
+    {
+      name: "Su Su",
+      email: "su@example.com",
+    },
+    {
+      name: "Mg Mg",
+      email: "mg@example.com",
+    },
+  ];
+
+  for (const requester of developmentRequesters) {
+    await prisma.developmentRequester.upsert({
+      where: { email: requester.email },
+      update: {
+        name: requester.name,
+        isActive: true,
+      },
+      create: requester,
+    });
+  }
+
+  console.log("Categories and development requesters seeded successfully.");
 }
 
 main()
