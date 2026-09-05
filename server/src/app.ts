@@ -48,11 +48,52 @@ app.get("/api/categories", async (_req: Request, res: Response) => {
     res.status(200).json(categories);
   } catch (error) {
     console.error("Failed to fetch categories:", error);
+
     res.status(500).json({
       error: "Failed to fetch categories",
     });
   }
 });
+
+// ---------------------------------------------------------------------------
+// Issue 17 — Related System list
+// ---------------------------------------------------------------------------
+// GET /api/related-systems
+// Returns active related systems from PostgreSQL, ordered by ID.
+// ---------------------------------------------------------------------------
+
+app.get(
+  "/api/related-systems",
+  async (_req: Request, res: Response) => {
+    try {
+      const prisma = getPrisma();
+
+      const relatedSystems = await prisma.relatedSystem.findMany({
+        where: {
+          isActive: true,
+        },
+        orderBy: {
+          id: "asc",
+        },
+        select: {
+          id: true,
+          name: true,
+        },
+      });
+
+      res.status(200).json(relatedSystems);
+    } catch (error) {
+      console.error(
+        "Failed to fetch related systems:",
+        error
+      );
+
+      res.status(500).json({
+        error: "RELATED_SYSTEMS_UNAVAILABLE",
+      });
+    }
+  }
+);
 
 // ---------------------------------------------------------------------------
 // Development Requester list
@@ -65,23 +106,27 @@ app.get("/api/requesters", async (_req: Request, res: Response) => {
   try {
     const prisma = getPrisma();
 
-    const requesters = await prisma.developmentRequester.findMany({
-      where: {
-        isActive: true,
-      },
-      orderBy: {
-        id: "asc",
-      },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-      },
-    });
+    const requesters =
+      await prisma.developmentRequester.findMany({
+        where: {
+          isActive: true,
+        },
+        orderBy: {
+          id: "asc",
+        },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+        },
+      });
 
     res.status(200).json(requesters);
   } catch (error) {
-    console.error("Failed to fetch requesters:", error);
+    console.error(
+      "Failed to fetch requesters:",
+      error
+    );
 
     res.status(500).json({
       error: "REQUESTERS_UNAVAILABLE",
@@ -148,28 +193,45 @@ app.post("/api/tickets", async (req: Request, res: Response) => {
   // Validate requester ID
   // -------------------------------------------------------------------------
 
-  if (!Number.isInteger(bodyRequesterId) || bodyRequesterId <= 0) {
-    details.push("requesterId must be a valid integer");
+  if (
+    !Number.isInteger(bodyRequesterId) ||
+    bodyRequesterId <= 0
+  ) {
+    details.push(
+      "requesterId must be a valid integer"
+    );
   }
 
   if (bodyRequesterId !== requesterId) {
-    details.push("requesterId must match X-Requester-Id");
+    details.push(
+      "requesterId must match X-Requester-Id"
+    );
   }
 
   // -------------------------------------------------------------------------
   // Validate Category
   // -------------------------------------------------------------------------
 
-  if (!Number.isInteger(categoryId) || categoryId <= 0) {
-    details.push("categoryId must be a valid integer");
+  if (
+    !Number.isInteger(categoryId) ||
+    categoryId <= 0
+  ) {
+    details.push(
+      "categoryId must be a valid integer"
+    );
   }
 
   // -------------------------------------------------------------------------
   // Validate Related System
   // -------------------------------------------------------------------------
 
-  if (!Number.isInteger(relatedSystemId) || relatedSystemId <= 0) {
-    details.push("relatedSystemId must be a valid integer");
+  if (
+    !Number.isInteger(relatedSystemId) ||
+    relatedSystemId <= 0
+  ) {
+    details.push(
+      "relatedSystemId must be a valid integer"
+    );
   }
 
   // -------------------------------------------------------------------------
@@ -177,10 +239,17 @@ app.post("/api/tickets", async (req: Request, res: Response) => {
   // -------------------------------------------------------------------------
 
   const trimmedSummary =
-    typeof summary === "string" ? summary.trim() : "";
+    typeof summary === "string"
+      ? summary.trim()
+      : "";
 
-  if (trimmedSummary.length < 5 || trimmedSummary.length > 200) {
-    details.push("Summary must be between 5 and 200 characters");
+  if (
+    trimmedSummary.length < 5 ||
+    trimmedSummary.length > 200
+  ) {
+    details.push(
+      "Summary must be between 5 and 200 characters"
+    );
   }
 
   // -------------------------------------------------------------------------
@@ -188,7 +257,9 @@ app.post("/api/tickets", async (req: Request, res: Response) => {
   // -------------------------------------------------------------------------
 
   const trimmedDescription =
-    typeof description === "string" ? description.trim() : "";
+    typeof description === "string"
+      ? description.trim()
+      : "";
 
   if (
     trimmedDescription.length < 10 ||
@@ -231,17 +302,18 @@ app.post("/api/tickets", async (req: Request, res: Response) => {
     // Validate active requester
     // -----------------------------------------------------------------------
 
-    const requester = await prisma.developmentRequester.findFirst({
-      where: {
-        id: requesterId,
-        isActive: true,
-      },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-      },
-    });
+    const requester =
+      await prisma.developmentRequester.findFirst({
+        where: {
+          id: requesterId,
+          isActive: true,
+        },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+        },
+      });
 
     if (!requester) {
       return res.status(400).json({
@@ -256,16 +328,17 @@ app.post("/api/tickets", async (req: Request, res: Response) => {
     // Validate active Category
     // -----------------------------------------------------------------------
 
-    const category = await prisma.category.findFirst({
-      where: {
-        id: categoryId,
-        isActive: true,
-      },
-      select: {
-        id: true,
-        name: true,
-      },
-    });
+    const category =
+      await prisma.category.findFirst({
+        where: {
+          id: categoryId,
+          isActive: true,
+        },
+        select: {
+          id: true,
+          name: true,
+        },
+      });
 
     if (!category) {
       return res.status(400).json({
@@ -280,16 +353,17 @@ app.post("/api/tickets", async (req: Request, res: Response) => {
     // Validate active Related System
     // -----------------------------------------------------------------------
 
-    const relatedSystem = await prisma.relatedSystem.findFirst({
-      where: {
-        id: relatedSystemId,
-        isActive: true,
-      },
-      select: {
-        id: true,
-        name: true,
-      },
-    });
+    const relatedSystem =
+      await prisma.relatedSystem.findFirst({
+        where: {
+          id: relatedSystemId,
+          isActive: true,
+        },
+        select: {
+          id: true,
+          name: true,
+        },
+      });
 
     if (!relatedSystem) {
       return res.status(400).json({
@@ -304,95 +378,107 @@ app.post("/api/tickets", async (req: Request, res: Response) => {
     // Create Ticket
     // -----------------------------------------------------------------------
 
-    const ticket = await prisma.$transaction(async (tx) => {
-      const ticketDate = new Date();
+    const ticket = await prisma.$transaction(
+      async (tx) => {
+        const ticketDate = new Date();
 
-      // Generate YYYYMMDD using UTC.
-      const year = ticketDate.getUTCFullYear();
+        // Generate YYYYMMDD using UTC.
+        const year =
+          ticketDate.getUTCFullYear();
 
-      const month = String(
-        ticketDate.getUTCMonth() + 1
-      ).padStart(2, "0");
+        const month = String(
+          ticketDate.getUTCMonth() + 1
+        ).padStart(2, "0");
 
-      const day = String(
-        ticketDate.getUTCDate()
-      ).padStart(2, "0");
+        const day = String(
+          ticketDate.getUTCDate()
+        ).padStart(2, "0");
 
-      const datePart = `${year}${month}${day}`;
+        const datePart =
+          `${year}${month}${day}`;
 
-      const prefix = `TCK-${datePart}-`;
+        const prefix =
+          `TCK-${datePart}-`;
 
-      // Prevent simultaneous requests from generating
-      // the same sequence number.
-      await tx.$executeRaw`
-        SELECT pg_advisory_xact_lock(hashtext(${prefix}))
-      `;
+        // Prevent simultaneous requests from generating
+        // the same sequence number.
+        await tx.$executeRaw`
+          SELECT pg_advisory_xact_lock(
+            hashtext(${prefix})
+          )
+        `;
 
-      // Count today's tickets.
-      const ticketCount = await tx.ticket.count({
-        where: {
-          ticketNumber: {
-            startsWith: prefix,
+        // Count today's tickets.
+        const ticketCount =
+          await tx.ticket.count({
+            where: {
+              ticketNumber: {
+                startsWith: prefix,
+              },
+            },
+          });
+
+        const sequenceNumber =
+          ticketCount + 1;
+
+        if (sequenceNumber > 9999) {
+          throw new Error(
+            "Daily ticket number limit reached"
+          );
+        }
+
+        const ticketNumber =
+          `${prefix}${String(
+            sequenceNumber
+          ).padStart(4, "0")}`;
+
+        return tx.ticket.create({
+          data: {
+            ticketNumber,
+            ticketDate,
+
+            requesterId,
+            categoryId,
+            relatedSystemId,
+
+            summary: trimmedSummary,
+            description: trimmedDescription,
+
+            requestedPriority:
+              requestedPriority as RequestedPriority,
+
+            currentStatus:
+              CurrentStatus.NEW,
           },
-        },
-      });
 
-      const sequenceNumber = ticketCount + 1;
+          include: {
+            requester: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+              },
+            },
 
-      if (sequenceNumber > 9999) {
-        throw new Error(
-          "Daily ticket number limit reached"
-        );
+            category: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+
+            relatedSystem: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+
+            attachments: true,
+          },
+        });
       }
-
-      const ticketNumber =
-        `${prefix}${String(sequenceNumber).padStart(4, "0")}`;
-
-      return tx.ticket.create({
-        data: {
-          ticketNumber,
-          ticketDate,
-
-          requesterId,
-          categoryId,
-          relatedSystemId,
-
-          summary: trimmedSummary,
-          description: trimmedDescription,
-
-          requestedPriority:
-            requestedPriority as RequestedPriority,
-
-          currentStatus: CurrentStatus.NEW,
-        },
-
-        include: {
-          requester: {
-            select: {
-              id: true,
-              name: true,
-              email: true,
-            },
-          },
-
-          category: {
-            select: {
-              id: true,
-              name: true,
-            },
-          },
-
-          relatedSystem: {
-            select: {
-              id: true,
-              name: true,
-            },
-          },
-
-          attachments: true,
-        },
-      });
-    });
+    );
 
     // -----------------------------------------------------------------------
     // Successful creation
@@ -400,7 +486,10 @@ app.post("/api/tickets", async (req: Request, res: Response) => {
 
     return res.status(201).json(ticket);
   } catch (error) {
-    console.error("Failed to create ticket:", error);
+    console.error(
+      "Failed to create ticket:",
+      error
+    );
 
     return res.status(500).json({
       error: "Failed to create ticket",
