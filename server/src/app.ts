@@ -1,35 +1,34 @@
 import express, { Request, Response } from "express";
 import cors from "cors";
+import multer from "multer";
+import { CurrentStatus, RequestedPriority } from "@prisma/client";
 import { getPrisma } from "./prisma.js";
-// getPrisma() is your lazy database handle. Call it INSIDE a route when you
-// need the DB (Issue 4). It is intentionally unused until then.
-void getPrisma;
 
-// The Express app is exported separately from app.listen() (see index.ts) so
-// Supertest can import `app` without opening a port. Do not merge these files.
+// The Express app is exported separately from app.listen() (see index.ts)
+// so Supertest can import `app` without opening a port.
 export const app = express();
 
-app.use(cors());          // already wired: lets the Vite dev server call this API
+app.use(cors());
 app.use(express.json());
-
+const upload = multer({
+  dest: "uploads/",
+});
 // ---------------------------------------------------------------------------
 // Issue 2 — API health check
-// Make the test in tests/lab-01/health.test.ts pass.
-// It must return HTTP 200 with JSON: { status: "ok", service: "TokTickIT API" }
 // ---------------------------------------------------------------------------
+
 app.get("/api/health", (_req: Request, res: Response) => {
   res.status(200).json({
-  status: "ok",
-  service: "TokTickIT API",
-});
+    status: "ok",
+    service: "TokTickIT API",
+  });
 });
 
 // ---------------------------------------------------------------------------
 // Issue 4 — Category list
 // ---------------------------------------------------------------------------
 // GET /api/categories
-// Returns categories from PostgreSQL via Prisma,
-// ordered by ID, with only id and name.
+// Returns categories from PostgreSQL, ordered by ID.
 // ---------------------------------------------------------------------------
 
 app.get("/api/categories", async (_req: Request, res: Response) => {
@@ -37,6 +36,9 @@ app.get("/api/categories", async (_req: Request, res: Response) => {
     const prisma = getPrisma();
 
     const categories = await prisma.category.findMany({
+      where: {
+        isActive: true,
+      },
       orderBy: {
         id: "asc",
       },
@@ -49,9 +51,1003 @@ app.get("/api/categories", async (_req: Request, res: Response) => {
     res.status(200).json(categories);
   } catch (error) {
     console.error("Failed to fetch categories:", error);
-    res.status(500).json({ error: "Failed to fetch categories" });
+
+    res.status(500).json({
+      error: "Failed to fetch categories",
+    });
   }
 });
+
+// ---------------------------------------------------------------------------
+// Issue 17 — Related System list
+// ---------------------------------------------------------------------------
+// GET /api/related-systems
+// Returns active related systems from PostgreSQL, ordered by ID.
+// ---------------------------------------------------------------------------
+
+app.get(
+  "/api/related-systems",
+  async (_req: Request, res: Response) => {
+    try {
+      const prisma = getPrisma();
+
+      const relatedSystems = await prisma.relatedSystem.findMany({
+        where: {
+          isActive: true,
+        },
+        orderBy: {
+          id: "asc",
+        },
+        select: {
+          id: true,
+          name: true,
+        },
+      });
+
+      res.status(200).json(relatedSystems);
+    } catch (error) {
+      console.error(
+        "Failed to fetch related systems:",
+        error
+      );
+
+      res.status(500).json({
+        error: "RELATED_SYSTEMS_UNAVAILABLE",
+      });
+    }
+  }
+);
+
+// ---------------------------------------------------------------------------
+// Development Requester list
+// ---------------------------------------------------------------------------
+// GET /api/requesters
+// Returns active development requesters with id, name, and email.
+// ---------------------------------------------------------------------------
+
+app.get("/api/requesters", async (_req: Request, res: Response) => {
+  try {
+    const prisma = getPrisma();
+
+    const requesters =
+      await prisma.developmentRequester.findMany({
+        where: {
+          isActive: true,
+        },
+        orderBy: {
+          id: "asc",
+        },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+        },
+      });
+
+    res.status(200).json(requesters);
+  } catch (error) {
+    console.error(
+      "Failed to fetch requesters:",
+      error
+    );
+
+    res.status(500).json({
+      error: "REQUESTERS_UNAVAILABLE",
+    });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Issue 14 — Create Ticket
+// ---------------------------------------------------------------------------
+// POST /api/tickets
+//
+// The selected Development Requester is communicated through
+// X-Requester-Id.
+//
+// The requesterId in the request body must match X-Requester-Id.
+//
+// Ticket Number is generated by the backend:
+//
+// TCK-YYYYMMDD-NNNN
+//
+// New tickets always start with Current Status = NEW.
+// ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// Requirement 4 — My Tickets
+// ---------------------------------------------------------------------------
+// GET /api/tickets
+// Returns tickets belonging to the selected Development Requester.
+// Supports search, filters, sorting, and pagination.
+// ---------------------------------------------------------------------------
+
+app.get("/api/tickets", async (req: Request, res: Response) => {
+  const requesterHeader = req.header("X-Requester-Id");
+
+  if (!requesterHeader) {
+    return res.status(400).json({
+      error: "X-Requester-Id header is required",
+    });
+  }
+
+  const requesterId = Number(requesterHeader);
+
+  if (!Number.isInteger(requesterId) || requesterId <= 0) {
+    return res.status(400).json({
+      error: "Invalid X-Requester-Id",
+    });
+  }
+
+  const search =
+    typeof req.query.search === "string"
+      ? req.query.search.trim()
+      : "";
+
+  const categoryId =
+    typeof req.query.categoryId === "string" &&
+    req.query.categoryId !== ""
+      ? Number(req.query.categoryId)
+      : undefined;
+
+  const relatedSystemId =
+    typeof req.query.relatedSystemId === "string" &&
+    req.query.relatedSystemId !== ""
+      ? Number(req.query.relatedSystemId)
+      : undefined;
+
+  const priority =
+    typeof req.query.priority === "string"
+      ? req.query.priority
+      : undefined;
+
+  const status =
+    typeof req.query.status === "string"
+      ? req.query.status
+      : undefined;
+
+  const sort =
+    typeof req.query.sort === "string"
+      ? req.query.sort
+      : "updatedDesc";
+
+  const page =
+    typeof req.query.page === "string"
+      ? Number(req.query.page)
+      : 1;
+
+  const pageSize =
+    typeof req.query.pageSize === "string"
+      ? Number(req.query.pageSize)
+      : 10;
+
+  if (
+    categoryId !== undefined &&
+    (!Number.isInteger(categoryId) || categoryId <= 0)
+  ) {
+    return res.status(400).json({
+      error: "Invalid categoryId",
+    });
+  }
+
+  if (
+    relatedSystemId !== undefined &&
+    (!Number.isInteger(relatedSystemId) || relatedSystemId <= 0)
+  ) {
+    return res.status(400).json({
+      error: "Invalid relatedSystemId",
+    });
+  }
+
+  if (
+    priority !== undefined &&
+    !["LOW", "MEDIUM", "HIGH"].includes(priority)
+  ) {
+    return res.status(400).json({
+      error: "Invalid priority",
+    });
+  }
+
+  if (status !== undefined && status !== "NEW") {
+    return res.status(400).json({
+      error: "Invalid status",
+    });
+  }
+
+  if (!["updatedDesc", "ticketDate", "ticketNumber", "priority"].includes(sort)) {
+    return res.status(400).json({
+      error: "Invalid sort",
+    });
+  }
+
+  if (!Number.isInteger(page) || page < 1) {
+    return res.status(400).json({
+      error: "Invalid page",
+    });
+  }
+
+  if (![10, 20, 50].includes(pageSize)) {
+    return res.status(400).json({
+      error: "Invalid pageSize",
+    });
+  }
+
+  try {
+    const prisma = getPrisma();
+
+    const where = {
+      requesterId,
+      ...(search
+        ? {
+            OR: [
+              {
+                ticketNumber: {
+                  contains: search,
+                  mode: "insensitive" as const,
+                },
+              },
+              {
+                summary: {
+                  contains: search,
+                  mode: "insensitive" as const,
+                },
+              },
+            ],
+          }
+        : {}),
+      ...(categoryId !== undefined ? { categoryId } : {}),
+      ...(relatedSystemId !== undefined ? { relatedSystemId } : {}),
+      ...(priority !== undefined
+        ? {
+            requestedPriority:
+              priority as RequestedPriority,
+          }
+        : {}),
+      ...(status !== undefined
+        ? {
+            currentStatus: status as CurrentStatus,
+          }
+        : {}),
+    };
+
+    let orderBy;
+
+    switch (sort) {
+      case "ticketDate":
+        orderBy = { ticketDate: "desc" as const };
+        break;
+
+      case "ticketNumber":
+        orderBy = { ticketNumber: "asc" as const };
+        break;
+
+      case "priority":
+        orderBy = { requestedPriority: "asc" as const };
+        break;
+
+      case "updatedDesc":
+      default:
+        orderBy = { updatedAt: "desc" as const };
+        break;
+    }
+
+    const [total, items] = await Promise.all([
+      prisma.ticket.count({ where }),
+
+      prisma.ticket.findMany({
+        where,
+        orderBy,
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+        select: {
+          id: true,
+          ticketNumber: true,
+          ticketDate: true,
+          summary: true,
+          description: true,
+          requestedPriority: true,
+          currentStatus: true,
+          createdAt: true,
+          updatedAt: true,
+
+          requester: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+            },
+          },
+
+          category: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+
+          relatedSystem: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+        },
+      }),
+    ]);
+
+    res.status(200).json({
+      items,
+      page,
+      pageSize,
+      total,
+      totalPages: Math.ceil(total / pageSize),
+    });
+  } catch (error) {
+    console.error("Failed to fetch tickets:", error);
+
+    res.status(500).json({
+      error: "Failed to fetch tickets",
+    });
+  }
+});
+
+app.post("/api/tickets", async (req: Request, res: Response) => {
+  const requesterHeader = req.header("X-Requester-Id");
+
+  // -------------------------------------------------------------------------
+  // Validate requester header
+  // -------------------------------------------------------------------------
+
+  if (!requesterHeader) {
+    return res.status(400).json({
+      error: "Validation failed",
+      details: ["X-Requester-Id header is required"],
+    });
+  }
+
+  const requesterId = Number(requesterHeader);
+
+  if (!Number.isInteger(requesterId) || requesterId <= 0) {
+    return res.status(400).json({
+      error: "Validation failed",
+      details: ["X-Requester-Id must be a valid integer"],
+    });
+  }
+
+  // -------------------------------------------------------------------------
+  // Read request body
+  // -------------------------------------------------------------------------
+
+  const {
+    requesterId: bodyRequesterId,
+    categoryId,
+    relatedSystemId,
+    summary,
+    description,
+    requestedPriority,
+  } = req.body;
+
+  const details: string[] = [];
+
+  // -------------------------------------------------------------------------
+  // Validate requester ID
+  // -------------------------------------------------------------------------
+
+  if (
+    !Number.isInteger(bodyRequesterId) ||
+    bodyRequesterId <= 0
+  ) {
+    details.push(
+      "requesterId must be a valid integer"
+    );
+  }
+
+  if (bodyRequesterId !== requesterId) {
+    details.push(
+      "requesterId must match X-Requester-Id"
+    );
+  }
+
+  // -------------------------------------------------------------------------
+  // Validate Category
+  // -------------------------------------------------------------------------
+
+  if (
+    !Number.isInteger(categoryId) ||
+    categoryId <= 0
+  ) {
+    details.push(
+      "categoryId must be a valid integer"
+    );
+  }
+
+  // -------------------------------------------------------------------------
+  // Validate Related System
+  // -------------------------------------------------------------------------
+
+  if (
+    !Number.isInteger(relatedSystemId) ||
+    relatedSystemId <= 0
+  ) {
+    details.push(
+      "relatedSystemId must be a valid integer"
+    );
+  }
+
+  // -------------------------------------------------------------------------
+  // Validate and trim Summary
+  // -------------------------------------------------------------------------
+
+  const trimmedSummary =
+    typeof summary === "string"
+      ? summary.trim()
+      : "";
+
+  if (
+    trimmedSummary.length < 5 ||
+    trimmedSummary.length > 200
+  ) {
+    details.push(
+      "Summary must be between 5 and 200 characters"
+    );
+  }
+
+  // -------------------------------------------------------------------------
+  // Validate and trim Description
+  // -------------------------------------------------------------------------
+
+  const trimmedDescription =
+    typeof description === "string"
+      ? description.trim()
+      : "";
+
+  if (
+    trimmedDescription.length < 10 ||
+    trimmedDescription.length > 2000
+  ) {
+    details.push(
+      "Description must be between 10 and 2000 characters"
+    );
+  }
+
+  // -------------------------------------------------------------------------
+  // Validate Requested Priority
+  // -------------------------------------------------------------------------
+
+  if (
+    requestedPriority !== "LOW" &&
+    requestedPriority !== "MEDIUM" &&
+    requestedPriority !== "HIGH"
+  ) {
+    details.push(
+      "requestedPriority must be LOW, MEDIUM, or HIGH"
+    );
+  }
+
+  // -------------------------------------------------------------------------
+  // Return validation errors
+  // -------------------------------------------------------------------------
+
+  if (details.length > 0) {
+    return res.status(400).json({
+      error: "Validation failed",
+      details,
+    });
+  }
+
+  try {
+    const prisma = getPrisma();
+
+    // -----------------------------------------------------------------------
+    // Validate active requester
+    // -----------------------------------------------------------------------
+
+    const requester =
+      await prisma.developmentRequester.findFirst({
+        where: {
+          id: requesterId,
+          isActive: true,
+        },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+        },
+      });
+
+    if (!requester) {
+      return res.status(400).json({
+        error: "Validation failed",
+        details: [
+          "Requester does not exist or is inactive",
+        ],
+      });
+    }
+
+    // -----------------------------------------------------------------------
+    // Validate active Category
+    // -----------------------------------------------------------------------
+
+    const category =
+      await prisma.category.findFirst({
+        where: {
+          id: categoryId,
+          isActive: true,
+        },
+        select: {
+          id: true,
+          name: true,
+        },
+      });
+
+    if (!category) {
+      return res.status(400).json({
+        error: "Validation failed",
+        details: [
+          "Category does not exist or is inactive",
+        ],
+      });
+    }
+
+    // -----------------------------------------------------------------------
+    // Validate active Related System
+    // -----------------------------------------------------------------------
+
+    const relatedSystem =
+      await prisma.relatedSystem.findFirst({
+        where: {
+          id: relatedSystemId,
+          isActive: true,
+        },
+        select: {
+          id: true,
+          name: true,
+        },
+      });
+
+    if (!relatedSystem) {
+      return res.status(400).json({
+        error: "Validation failed",
+        details: [
+          "Related System does not exist or is inactive",
+        ],
+      });
+    }
+
+    // -----------------------------------------------------------------------
+    // Create Ticket
+    // -----------------------------------------------------------------------
+
+    const ticket = await prisma.$transaction(
+      async (tx) => {
+        const ticketDate = new Date();
+
+        // Generate YYYYMMDD using UTC.
+        const year =
+          ticketDate.getUTCFullYear();
+
+        const month = String(
+          ticketDate.getUTCMonth() + 1
+        ).padStart(2, "0");
+
+        const day = String(
+          ticketDate.getUTCDate()
+        ).padStart(2, "0");
+
+        const datePart =
+          `${year}${month}${day}`;
+
+        const prefix =
+          `TCK-${datePart}-`;
+
+        // Prevent simultaneous requests from generating
+        // the same sequence number.
+        await tx.$executeRaw`
+          SELECT pg_advisory_xact_lock(
+            hashtext(${prefix})
+          )
+        `;
+
+        // Count today's tickets.
+        const ticketCount =
+          await tx.ticket.count({
+            where: {
+              ticketNumber: {
+                startsWith: prefix,
+              },
+            },
+          });
+
+        const sequenceNumber =
+          ticketCount + 1;
+
+        if (sequenceNumber > 9999) {
+          throw new Error(
+            "Daily ticket number limit reached"
+          );
+        }
+
+        const ticketNumber =
+          `${prefix}${String(
+            sequenceNumber
+          ).padStart(4, "0")}`;
+
+        return tx.ticket.create({
+          data: {
+            ticketNumber,
+            ticketDate,
+
+            requesterId,
+            categoryId,
+            relatedSystemId,
+
+            summary: trimmedSummary,
+            description: trimmedDescription,
+
+            requestedPriority:
+              requestedPriority as RequestedPriority,
+
+            currentStatus:
+              CurrentStatus.NEW,
+          },
+
+          include: {
+            requester: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+              },
+            },
+
+            category: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+
+            relatedSystem: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+
+            attachments: true,
+          },
+        });
+      }
+    );
+
+    // -----------------------------------------------------------------------
+    // Successful creation
+    // -----------------------------------------------------------------------
+
+    return res.status(201).json(ticket);
+  } catch (error) {
+    console.error(
+      "Failed to create ticket:",
+      error
+    );
+
+    return res.status(500).json({
+      error: "Failed to create ticket",
+    });
+  }
+});
+
+app.post(
+  "/api/tickets/:ticketId/attachments",
+  upload.single("file"),
+  async (req: Request, res: Response) => {
+    const requesterHeader = req.header("X-Requester-Id");
+
+    if (!requesterHeader) {
+      return res.status(400).json({
+        error: "X-Requester-Id header is required",
+      });
+    }
+
+    const requesterId = Number(requesterHeader);
+    const ticketId = Number(req.params.ticketId);
+
+    if (
+      !Number.isInteger(requesterId) ||
+      requesterId <= 0 ||
+      !Number.isInteger(ticketId) ||
+      ticketId <= 0
+    ) {
+      return res.status(400).json({
+        error: "Invalid requester or ticket ID",
+      });
+    }
+
+    if (!req.file) {
+      return res.status(400).json({
+        error: "No file uploaded",
+      });
+    }
+
+    try {
+      const prisma = getPrisma();
+
+      const ticket = await prisma.ticket.findFirst({
+        where: {
+          id: ticketId,
+          requesterId,
+        },
+      });
+
+      if (!ticket) {
+        return res.status(404).json({
+          error: "Ticket not found",
+        });
+      }
+
+      const activeAttachmentCount =
+        await prisma.attachment.count({
+          where: {
+            ticketId,
+            removedAt: null,
+          },
+        });
+
+      if (activeAttachmentCount >= 5) {
+        return res.status(400).json({
+          error: "Maximum of 5 active attachments allowed",
+        });
+      }
+
+      const allowedMimeTypes = [
+        "image/jpeg",
+        "image/png",
+        "image/webp",
+        "application/pdf",
+      ];
+
+      if (!allowedMimeTypes.includes(req.file.mimetype)) {
+        return res.status(400).json({
+          error: "Unsupported file type",
+        });
+      }
+
+      if (req.file.size > 5 * 1024 * 1024) {
+        return res.status(400).json({
+          error: "File size must not exceed 5 MB",
+        });
+      }
+
+      const attachment =
+        await prisma.attachment.create({
+          data: {
+            ticketId,
+            originalFileName: req.file.originalname,
+            storedFileName: req.file.filename,
+            mimeType: req.file.mimetype,
+            sizeBytes: req.file.size,
+            storagePath: req.file.path,
+          },
+        });
+
+      return res.status(201).json(attachment);
+    } catch (error) {
+      console.error(
+        "Failed to upload attachment:",
+        error
+      );
+
+      return res.status(500).json({
+        error: "Failed to upload attachment",
+      });
+    }
+  }
+);
+
+app.get(
+  "/api/tickets/:ticketId/attachments/:attachmentId",
+  async (req: Request, res: Response) => {
+    const requesterHeader = req.header("X-Requester-Id");
+
+    if (!requesterHeader) {
+      return res.status(400).json({
+        error: "X-Requester-Id header is required",
+      });
+    }
+
+    const requesterId = Number(requesterHeader);
+    const ticketId = Number(req.params.ticketId);
+    const attachmentId = Number(req.params.attachmentId);
+
+    if (
+      !Number.isInteger(requesterId) ||
+      requesterId <= 0 ||
+      !Number.isInteger(ticketId) ||
+      ticketId <= 0 ||
+      !Number.isInteger(attachmentId) ||
+      attachmentId <= 0
+    ) {
+      return res.status(400).json({
+        error: "Invalid requester, ticket, or attachment ID",
+      });
+    }
+
+    try {
+      const prisma = getPrisma();
+
+      const attachment = await prisma.attachment.findFirst({
+        where: {
+          id: attachmentId,
+          ticketId,
+          removedAt: null,
+          ticket: {
+            requesterId,
+          },
+        },
+      });
+
+      if (!attachment) {
+        return res.status(404).json({
+          error: "Attachment not found",
+        });
+      }
+
+      return res.download(
+        attachment.storagePath,
+        attachment.originalFileName
+      );
+    } catch (error) {
+      console.error(
+        "Failed to download attachment:",
+        error
+      );
+
+      return res.status(500).json({
+        error: "Failed to download attachment",
+      });
+    }
+  }
+);
+
+app.delete(
+  "/api/tickets/:ticketId/attachments/:attachmentId",
+  async (req: Request, res: Response) => {
+    const requesterHeader = req.header("X-Requester-Id");
+
+    if (!requesterHeader) {
+      return res.status(400).json({
+        error: "X-Requester-Id header is required",
+      });
+    }
+
+    const requesterId = Number(requesterHeader);
+    const ticketId = Number(req.params.ticketId);
+    const attachmentId = Number(req.params.attachmentId);
+
+    if (
+      !Number.isInteger(requesterId) ||
+      requesterId <= 0 ||
+      !Number.isInteger(ticketId) ||
+      ticketId <= 0 ||
+      !Number.isInteger(attachmentId) ||
+      attachmentId <= 0
+    ) {
+      return res.status(400).json({
+        error: "Invalid requester, ticket, or attachment ID",
+      });
+    }
+
+    try {
+      const prisma = getPrisma();
+
+      const attachment = await prisma.attachment.findFirst({
+        where: {
+          id: attachmentId,
+          ticketId,
+          removedAt: null,
+          ticket: {
+            requesterId,
+          },
+        },
+      });
+
+      if (!attachment) {
+        return res.status(404).json({
+          error: "Attachment not found",
+        });
+      }
+
+      const removedAttachment =
+        await prisma.attachment.update({
+          where: {
+            id: attachmentId,
+          },
+          data: {
+            removedAt: new Date(),
+            removalReason: "Removed by requester",
+          },
+        });
+
+      return res.json(removedAttachment);
+    } catch (error) {
+      console.error(
+        "Failed to remove attachment:",
+        error
+      );
+
+      return res.status(500).json({
+        error: "Failed to remove attachment",
+      });
+    }
+  }
+);
+
+app.get(
+  "/api/tickets/:ticketId",
+  async (req: Request, res: Response) => {
+    const requesterHeader = req.header("X-Requester-Id");
+
+    if (!requesterHeader) {
+      return res.status(400).json({
+        error: "X-Requester-Id header is required",
+      });
+    }
+
+    const requesterId = Number(requesterHeader);
+    const ticketId = Number(req.params.ticketId);
+
+    if (
+      !Number.isInteger(requesterId) ||
+      requesterId <= 0 ||
+      !Number.isInteger(ticketId) ||
+      ticketId <= 0
+    ) {
+      return res.status(400).json({
+        error: "Invalid requester or ticket ID",
+      });
+    }
+
+    try {
+      const prisma = getPrisma();
+
+      const ticket = await prisma.ticket.findFirst({
+        where: {
+          id: ticketId,
+          requesterId,
+        },
+        include: {
+          requester: true,
+          category: true,
+          relatedSystem: true,
+          attachments: {
+            where: {
+              removedAt: null,
+            },
+            orderBy: {
+              uploadedAt: "desc",
+            },
+          },
+        },
+      });
+
+      if (!ticket) {
+        return res.status(404).json({
+          error: "Ticket not found",
+        });
+      }
+
+      return res.json(ticket);
+    } catch (error) {
+      console.error(
+        "Failed to load ticket:",
+        error
+      );
+
+      return res.status(500).json({
+        error: "Failed to load ticket",
+      });
+    }
+  }
+);
 // ---------------------------------------------------------------------------
 
 export default app;
