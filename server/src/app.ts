@@ -1,5 +1,6 @@
 import express, { Request, Response } from "express";
 import cors from "cors";
+import multer from "multer";
 import { CurrentStatus, RequestedPriority } from "@prisma/client";
 import { getPrisma } from "./prisma.js";
 
@@ -9,7 +10,9 @@ export const app = express();
 
 app.use(cors());
 app.use(express.json());
-
+const upload = multer({
+  dest: "uploads/",
+});
 // ---------------------------------------------------------------------------
 // Issue 2 — API health check
 // ---------------------------------------------------------------------------
@@ -733,6 +736,318 @@ app.post("/api/tickets", async (req: Request, res: Response) => {
   }
 });
 
+app.post(
+  "/api/tickets/:ticketId/attachments",
+  upload.single("file"),
+  async (req: Request, res: Response) => {
+    const requesterHeader = req.header("X-Requester-Id");
+
+    if (!requesterHeader) {
+      return res.status(400).json({
+        error: "X-Requester-Id header is required",
+      });
+    }
+
+    const requesterId = Number(requesterHeader);
+    const ticketId = Number(req.params.ticketId);
+
+    if (
+      !Number.isInteger(requesterId) ||
+      requesterId <= 0 ||
+      !Number.isInteger(ticketId) ||
+      ticketId <= 0
+    ) {
+      return res.status(400).json({
+        error: "Invalid requester or ticket ID",
+      });
+    }
+
+    if (!req.file) {
+      return res.status(400).json({
+        error: "No file uploaded",
+      });
+    }
+
+    try {
+      const prisma = getPrisma();
+
+      const ticket = await prisma.ticket.findFirst({
+        where: {
+          id: ticketId,
+          requesterId,
+        },
+      });
+
+      if (!ticket) {
+        return res.status(404).json({
+          error: "Ticket not found",
+        });
+      }
+
+      const activeAttachmentCount =
+        await prisma.attachment.count({
+          where: {
+            ticketId,
+            removedAt: null,
+          },
+        });
+
+      if (activeAttachmentCount >= 5) {
+        return res.status(400).json({
+          error: "Maximum of 5 active attachments allowed",
+        });
+      }
+
+      const allowedMimeTypes = [
+        "image/jpeg",
+        "image/png",
+        "image/webp",
+        "application/pdf",
+      ];
+
+      if (!allowedMimeTypes.includes(req.file.mimetype)) {
+        return res.status(400).json({
+          error: "Unsupported file type",
+        });
+      }
+
+      if (req.file.size > 5 * 1024 * 1024) {
+        return res.status(400).json({
+          error: "File size must not exceed 5 MB",
+        });
+      }
+
+      const attachment =
+        await prisma.attachment.create({
+          data: {
+            ticketId,
+            originalFileName: req.file.originalname,
+            storedFileName: req.file.filename,
+            mimeType: req.file.mimetype,
+            sizeBytes: req.file.size,
+            storagePath: req.file.path,
+          },
+        });
+
+      return res.status(201).json(attachment);
+    } catch (error) {
+      console.error(
+        "Failed to upload attachment:",
+        error
+      );
+
+      return res.status(500).json({
+        error: "Failed to upload attachment",
+      });
+    }
+  }
+);
+
+app.get(
+  "/api/tickets/:ticketId/attachments/:attachmentId",
+  async (req: Request, res: Response) => {
+    const requesterHeader = req.header("X-Requester-Id");
+
+    if (!requesterHeader) {
+      return res.status(400).json({
+        error: "X-Requester-Id header is required",
+      });
+    }
+
+    const requesterId = Number(requesterHeader);
+    const ticketId = Number(req.params.ticketId);
+    const attachmentId = Number(req.params.attachmentId);
+
+    if (
+      !Number.isInteger(requesterId) ||
+      requesterId <= 0 ||
+      !Number.isInteger(ticketId) ||
+      ticketId <= 0 ||
+      !Number.isInteger(attachmentId) ||
+      attachmentId <= 0
+    ) {
+      return res.status(400).json({
+        error: "Invalid requester, ticket, or attachment ID",
+      });
+    }
+
+    try {
+      const prisma = getPrisma();
+
+      const attachment = await prisma.attachment.findFirst({
+        where: {
+          id: attachmentId,
+          ticketId,
+          removedAt: null,
+          ticket: {
+            requesterId,
+          },
+        },
+      });
+
+      if (!attachment) {
+        return res.status(404).json({
+          error: "Attachment not found",
+        });
+      }
+
+      return res.download(
+        attachment.storagePath,
+        attachment.originalFileName
+      );
+    } catch (error) {
+      console.error(
+        "Failed to download attachment:",
+        error
+      );
+
+      return res.status(500).json({
+        error: "Failed to download attachment",
+      });
+    }
+  }
+);
+
+app.delete(
+  "/api/tickets/:ticketId/attachments/:attachmentId",
+  async (req: Request, res: Response) => {
+    const requesterHeader = req.header("X-Requester-Id");
+
+    if (!requesterHeader) {
+      return res.status(400).json({
+        error: "X-Requester-Id header is required",
+      });
+    }
+
+    const requesterId = Number(requesterHeader);
+    const ticketId = Number(req.params.ticketId);
+    const attachmentId = Number(req.params.attachmentId);
+
+    if (
+      !Number.isInteger(requesterId) ||
+      requesterId <= 0 ||
+      !Number.isInteger(ticketId) ||
+      ticketId <= 0 ||
+      !Number.isInteger(attachmentId) ||
+      attachmentId <= 0
+    ) {
+      return res.status(400).json({
+        error: "Invalid requester, ticket, or attachment ID",
+      });
+    }
+
+    try {
+      const prisma = getPrisma();
+
+      const attachment = await prisma.attachment.findFirst({
+        where: {
+          id: attachmentId,
+          ticketId,
+          removedAt: null,
+          ticket: {
+            requesterId,
+          },
+        },
+      });
+
+      if (!attachment) {
+        return res.status(404).json({
+          error: "Attachment not found",
+        });
+      }
+
+      const removedAttachment =
+        await prisma.attachment.update({
+          where: {
+            id: attachmentId,
+          },
+          data: {
+            removedAt: new Date(),
+            removalReason: "Removed by requester",
+          },
+        });
+
+      return res.json(removedAttachment);
+    } catch (error) {
+      console.error(
+        "Failed to remove attachment:",
+        error
+      );
+
+      return res.status(500).json({
+        error: "Failed to remove attachment",
+      });
+    }
+  }
+);
+
+app.get(
+  "/api/tickets/:ticketId",
+  async (req: Request, res: Response) => {
+    const requesterHeader = req.header("X-Requester-Id");
+
+    if (!requesterHeader) {
+      return res.status(400).json({
+        error: "X-Requester-Id header is required",
+      });
+    }
+
+    const requesterId = Number(requesterHeader);
+    const ticketId = Number(req.params.ticketId);
+
+    if (
+      !Number.isInteger(requesterId) ||
+      requesterId <= 0 ||
+      !Number.isInteger(ticketId) ||
+      ticketId <= 0
+    ) {
+      return res.status(400).json({
+        error: "Invalid requester or ticket ID",
+      });
+    }
+
+    try {
+      const prisma = getPrisma();
+
+      const ticket = await prisma.ticket.findFirst({
+        where: {
+          id: ticketId,
+          requesterId,
+        },
+        include: {
+          requester: true,
+          category: true,
+          relatedSystem: true,
+          attachments: {
+            where: {
+              removedAt: null,
+            },
+            orderBy: {
+              uploadedAt: "desc",
+            },
+          },
+        },
+      });
+
+      if (!ticket) {
+        return res.status(404).json({
+          error: "Ticket not found",
+        });
+      }
+
+      return res.json(ticket);
+    } catch (error) {
+      console.error(
+        "Failed to load ticket:",
+        error
+      );
+
+      return res.status(500).json({
+        error: "Failed to load ticket",
+      });
+    }
+  }
+);
 // ---------------------------------------------------------------------------
 
 export default app;
