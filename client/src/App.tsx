@@ -13,6 +13,10 @@ import {
   getCategories,
   getDevelopmentRequesters,
   getRelatedSystems,
+  getTicketById,
+  getAttachmentDownloadUrl,
+  uploadAttachment,
+  removeAttachment,
 } from "./api.js";
 
 import MyTickets from "./MyTickets.js";
@@ -125,7 +129,8 @@ export default function App() {
     useState<Awaited<ReturnType<typeof createTicket>> | null>(
       null
     );
-
+  const [selectedTicket, setSelectedTicket] =
+    useState<Awaited<ReturnType<typeof getTicketById>> | null>(null);
   // --------------------------------------------------
   // Load Development Requesters
   // --------------------------------------------------
@@ -212,10 +217,87 @@ export default function App() {
   function handleOpenMyTicket() {
   setPage("tickets");
   }
-
-  function handleViewCreatedTicket() {
-  setPage("detail");
+  async function handleOpenAttachment(
+  ticketId: number,
+  attachmentId: number
+) {
+  if (!selectedRequester) {
+    return;
   }
+
+  try {
+    const response = await fetch(
+      getAttachmentDownloadUrl(ticketId, attachmentId),
+      {
+        headers: {
+          "X-Requester-Id": String(selectedRequester.id),
+        },
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error("Unable to open attachment");
+    }
+
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+
+    window.open(url, "_blank");
+
+    setTimeout(() => {
+      URL.revokeObjectURL(url);
+    }, 60000);
+  } catch (error) {
+    console.error(error);
+  }
+}
+
+async function handleUploadAttachment(
+  event: ChangeEvent<HTMLInputElement>
+) {
+  const file = event.target.files?.[0];
+
+  if (!file || !selectedTicket || !selectedRequester) {
+    return;
+  }
+
+  try {
+    await uploadAttachment(
+      selectedTicket.id,
+      selectedRequester.id,
+      file
+    );
+
+    const updatedTicket = await getTicketById(
+      selectedTicket.id,
+      selectedRequester.id
+    );
+
+    setSelectedTicket(updatedTicket);
+  } catch (error) {
+    console.error(error);
+  }
+
+  event.target.value = "";
+}
+
+  async function handleViewCreatedTicket() {
+  if (!createdTicket || !selectedRequester) {
+    return;
+  }
+
+  try {
+    const ticket = await getTicketById(
+      createdTicket.id,
+      selectedRequester.id
+    );
+
+    setSelectedTicket(ticket);
+    setPage("detail");
+  } catch (error) {
+    console.error(error);
+  }
+}
 
   function handleRequesterChange(
     event: ChangeEvent<HTMLSelectElement>
@@ -826,6 +908,23 @@ export default function App() {
             relatedSystems={relatedSystems}
             onBack={() => setPage("home")}
             onCreateTicket={handleOpenCreateTicket}
+            onViewTicket={async (ticketId) => {
+  if (!selectedRequester) {
+    return;
+  }
+
+  try {
+    const ticket = await getTicketById(
+      ticketId,
+      selectedRequester.id
+    );
+
+    setSelectedTicket(ticket);
+    setPage("detail");
+  } catch (error) {
+    console.error(error);
+  }
+}}
           />
       ) : page === "detail" ? (
   <div
@@ -844,7 +943,7 @@ export default function App() {
       Ticket Detail
     </h2>
 
-    {createdTicket && (
+    {selectedTicket && (
       <div
         style={{
           backgroundColor: "white",
@@ -855,45 +954,118 @@ export default function App() {
       >
         <p>
           <strong>Ticket Number:</strong>{" "}
-          {createdTicket.ticketNumber}
+          {selectedTicket.ticketNumber}
         </p>
 
         <p>
           <strong>Ticket Date:</strong>{" "}
           {new Date(
-            createdTicket.ticketDate
+            selectedTicket.ticketDate
           ).toLocaleString()}
         </p>
 
         <p>
           <strong>Summary:</strong>{" "}
-          {createdTicket.summary}
+          {selectedTicket.summary}
         </p>
 
         <p>
           <strong>Description:</strong>{" "}
-          {createdTicket.description}
+          {selectedTicket.description}
         </p>
 
         <p>
           <strong>Category:</strong>{" "}
-          {createdTicket.category.name}
+          {selectedTicket.category.name}
         </p>
 
         <p>
           <strong>Related System:</strong>{" "}
-          {createdTicket.relatedSystem.name}
+          {selectedTicket.relatedSystem.name}
         </p>
 
         <p>
           <strong>Requested Priority:</strong>{" "}
-          {createdTicket.requestedPriority}
+          {selectedTicket.requestedPriority}
         </p>
 
         <p>
           <strong>Status:</strong> Open
         </p>
+        <h3
+  style={{
+    color: "#006B3C",
+    marginTop: "24px",
+    marginBottom: "12px",
+  }}
+>
+  Attachments
+</h3>
 
+{selectedTicket.attachments.length === 0 ? (
+  <p>No attachments.</p>
+) : (
+  <ul>
+    {selectedTicket.attachments.map((attachment) => (
+  <li key={attachment.id}>
+    <button
+  type="button"
+  onClick={() =>
+    handleOpenAttachment(
+      selectedTicket.id,
+      attachment.id
+    )
+  }
+  style={{
+    background: "none",
+    border: "none",
+    padding: 0,
+    color: "#006B3C",
+    textDecoration: "underline",
+    cursor: "pointer",
+  }}
+>
+  {attachment.originalFileName}
+</button>
+
+    {" "}
+
+    <button
+      type="button"
+      onClick={async () => {
+        if (!selectedRequester) {
+          return;
+        }
+
+        try {
+          await removeAttachment(
+            selectedTicket.id,
+            attachment.id,
+            selectedRequester.id
+          );
+
+          const updatedTicket = await getTicketById(
+            selectedTicket.id,
+            selectedRequester.id
+          );
+
+          setSelectedTicket(updatedTicket);
+        } catch (error) {
+          console.error(error);
+        }
+      }}
+    >
+      Remove
+    </button>
+  </li>
+))}
+  </ul>
+)}
+<input
+  type="file"
+  accept=".jpg,.jpeg,.png,.webp,.pdf"
+  onChange={handleUploadAttachment}
+/>
         <button
           type="button"
           onClick={() => setPage("create")}

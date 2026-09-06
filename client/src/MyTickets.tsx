@@ -13,6 +13,7 @@ interface MyTicketsProps {
   relatedSystems: RelatedSystem[];
   onBack: () => void;
   onCreateTicket: () => void;
+  onViewTicket: (ticketId: number) => void;
 }
 
 type Priority = "" | "LOW" | "MEDIUM" | "HIGH";
@@ -34,6 +35,7 @@ export default function MyTickets({
   relatedSystems,
   onBack,
   onCreateTicket,
+  onViewTicket,
 }: MyTicketsProps) {
   const [search, setSearch] = useState("");
   const [categoryId, setCategoryId] = useState("");
@@ -483,7 +485,21 @@ export default function MyTickets({
                   {tickets.map((ticket) => (
                     <tr key={ticket.id}>
                       <td>
-                        <strong>{ticket.ticketNumber}</strong>
+                        <strong><button
+  type="button"
+  onClick={() => onViewTicket(ticket.id)}
+  style={{
+    background: "none",
+    border: "none",
+    padding: 0,
+    color: "#006B3C",
+    textDecoration: "underline",
+    cursor: "pointer",
+    fontWeight: 600,
+  }}
+>
+  {ticket.ticketNumber}
+</button></strong>
                       </td>
 
                       <td>{ticket.summary}</td>

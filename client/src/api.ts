@@ -44,7 +44,20 @@ export interface CreatedTicket {
   currentStatus: "NEW";
   createdAt: string;
   updatedAt: string;
-  attachments: unknown[];
+  attachments: Attachment[];
+}
+
+export interface Attachment {
+  id: number;
+  ticketId: number;
+  originalFileName: string;
+  storedFileName: string;
+  mimeType: string;
+  sizeBytes: number;
+  storagePath: string;
+  uploadedAt: string;
+  removedAt: string | null;
+  removalReason: string | null;
 }
 
 export interface TicketListItem {
@@ -254,4 +267,96 @@ export async function checkSystem(): Promise<SystemStatus> {
     online: true,
     categories,
   };
+}
+export async function uploadAttachment(
+  ticketId: number,
+  requesterId: number,
+  file: File
+): Promise<Attachment> {
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const response = await fetch(
+    `${API_URL}/api/tickets/${ticketId}/attachments`,
+    {
+      method: "POST",
+      headers: {
+        "X-Requester-Id": String(requesterId),
+      },
+      body: formData,
+    }
+  );
+
+  if (!response.ok) {
+    let message = "Unable to upload attachment";
+    try {
+      const errorBody = await response.json();
+      if (typeof errorBody.error === "string") {
+        message = errorBody.error;
+      }
+    } catch {
+      // Keep safe default
+    }
+    throw new Error(message);
+  }
+
+  return response.json();
+}
+
+export function getAttachmentDownloadUrl(
+  ticketId: number,
+  attachmentId: number
+): string {
+  return `${API_URL}/api/tickets/${ticketId}/attachments/${attachmentId}`;
+}
+
+export async function removeAttachment(
+  ticketId: number,
+  attachmentId: number,
+  requesterId: number
+): Promise<Attachment> {
+  const response = await fetch(
+    `${API_URL}/api/tickets/${ticketId}/attachments/${attachmentId}`,
+    {
+      method: "DELETE",
+      headers: {
+        "X-Requester-Id": String(requesterId),
+      },
+    }
+  );
+
+  if (!response.ok) {
+    let message = "Unable to remove attachment";
+    try {
+      const errorBody = await response.json();
+      if (typeof errorBody.error === "string") {
+        message = errorBody.error;
+      }
+    } catch {
+      // Keep safe default
+    }
+    throw new Error(message);
+  }
+
+  return response.json();
+}
+
+export async function getTicketById(
+  ticketId: number,
+  requesterId: number
+): Promise<CreatedTicket> {
+  const response = await fetch(
+    `${API_URL}/api/tickets/${ticketId}`,
+    {
+      headers: {
+        "X-Requester-Id": String(requesterId),
+      },
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error("Unable to load ticket");
+  }
+
+  return response.json();
 }
