@@ -15,7 +15,9 @@ import {
   getRelatedSystems,
 } from "./api.js";
 
-type Page = "home" | "create";
+import MyTickets from "./MyTickets.js";
+
+type Page = "home" | "create" | "tickets" | "detail";
 
 type FormErrors = {
   categoryId?: string;
@@ -205,6 +207,14 @@ export default function App() {
     setSelectedRequester(null);
 
     resetCreateForm();
+  }
+  
+  function handleOpenMyTicket() {
+  setPage("tickets");
+  }
+
+  function handleViewCreatedTicket() {
+  setPage("detail");
   }
 
   function handleRequesterChange(
@@ -768,21 +778,17 @@ export default function App() {
             >
               {/* Issue #18 */}
               <button
-                type="button"
-                disabled
-                style={{
-                  backgroundColor:
-                    "#EAF6EF",
-                  color: "#006B3C",
-                  border:
-                    "1px solid #B8D9C7",
-                  borderRadius: "6px",
-                  padding:
-                    "10px 16px",
-                  fontWeight: 600,
-                  cursor: "not-allowed",
-                  opacity: 0.65,
-                }}
+              type="button"
+              onClick={handleOpenMyTicket}
+              style={{
+                backgroundColor: "#EAF6EF",
+                color: "#006B3C",
+                border: "1px solid #B8D9C7",
+                borderRadius: "6px",
+                padding: "10px 16px",
+                fontWeight: 600,
+                cursor: "pointer",
+              }}
               >
                 My Tickets
               </button>
@@ -809,7 +815,105 @@ export default function App() {
               </button>
             </nav>
           </section>
-        ) : (
+         ) : page === "tickets" ? (
+        /* ==========================================
+           MY TICKETS
+           ========================================== */
+
+          <MyTickets
+            requester={selectedRequester}
+            categories={categories}
+            relatedSystems={relatedSystems}
+            onBack={() => setPage("home")}
+            onCreateTicket={handleOpenCreateTicket}
+          />
+      ) : page === "detail" ? (
+  <div
+    style={{
+      maxWidth: "900px",
+      margin: "0 auto",
+      padding: "24px",
+    }}
+  >
+    <h2
+      style={{
+        color: "#006B3C",
+        marginBottom: "24px",
+      }}
+    >
+      Ticket Detail
+    </h2>
+
+    {createdTicket && (
+      <div
+        style={{
+          backgroundColor: "white",
+          border: "1px solid #D8E5DE",
+          borderRadius: "8px",
+          padding: "24px",
+        }}
+      >
+        <p>
+          <strong>Ticket Number:</strong>{" "}
+          {createdTicket.ticketNumber}
+        </p>
+
+        <p>
+          <strong>Ticket Date:</strong>{" "}
+          {new Date(
+            createdTicket.ticketDate
+          ).toLocaleString()}
+        </p>
+
+        <p>
+          <strong>Summary:</strong>{" "}
+          {createdTicket.summary}
+        </p>
+
+        <p>
+          <strong>Description:</strong>{" "}
+          {createdTicket.description}
+        </p>
+
+        <p>
+          <strong>Category:</strong>{" "}
+          {createdTicket.category.name}
+        </p>
+
+        <p>
+          <strong>Related System:</strong>{" "}
+          {createdTicket.relatedSystem.name}
+        </p>
+
+        <p>
+          <strong>Requested Priority:</strong>{" "}
+          {createdTicket.requestedPriority}
+        </p>
+
+        <p>
+          <strong>Status:</strong> Open
+        </p>
+
+        <button
+          type="button"
+          onClick={() => setPage("create")}
+          style={{
+            backgroundColor: "#006B3C",
+            color: "white",
+            border: "none",
+            borderRadius: "6px",
+            padding: "10px 16px",
+            fontWeight: 600,
+            cursor: "pointer",
+            marginTop: "16px",
+          }}
+        >
+          Back
+        </button>
+      </div>
+    )}
+  </div>
+) : (
           /* ==========================================
              CREATE TICKET
              ========================================== */
@@ -956,7 +1060,7 @@ export default function App() {
                   {/* Future Issue #19 */}
                   <button
                     type="button"
-                    disabled
+                    onClick={handleViewCreatedTicket}
                     style={{
                       backgroundColor:
                         "#EAF6EF",
@@ -968,8 +1072,7 @@ export default function App() {
                         "10px 16px",
                       fontWeight: 600,
                       cursor:
-                        "not-allowed",
-                      opacity: 0.65,
+                        "pointer",
                     }}
                   >
                     View Ticket
@@ -978,7 +1081,7 @@ export default function App() {
                   {/* Future Issue #18 */}
                   <button
                     type="button"
-                    disabled
+                    onClick={() => setPage("tickets")}
                     style={{
                       backgroundColor:
                         "#EAF6EF",
@@ -990,8 +1093,8 @@ export default function App() {
                         "10px 16px",
                       fontWeight: 600,
                       cursor:
-                        "not-allowed",
-                      opacity: 0.65,
+                        "pointer",
+                      
                     }}
                   >
                     My Tickets
