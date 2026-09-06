@@ -150,6 +150,242 @@ app.get("/api/requesters", async (_req: Request, res: Response) => {
 //
 // New tickets always start with Current Status = NEW.
 // ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// Requirement 4 — My Tickets
+// ---------------------------------------------------------------------------
+// GET /api/tickets
+// Returns tickets belonging to the selected Development Requester.
+// Supports search, filters, sorting, and pagination.
+// ---------------------------------------------------------------------------
+
+app.get("/api/tickets", async (req: Request, res: Response) => {
+  const requesterHeader = req.header("X-Requester-Id");
+
+  if (!requesterHeader) {
+    return res.status(400).json({
+      error: "X-Requester-Id header is required",
+    });
+  }
+
+  const requesterId = Number(requesterHeader);
+
+  if (!Number.isInteger(requesterId) || requesterId <= 0) {
+    return res.status(400).json({
+      error: "Invalid X-Requester-Id",
+    });
+  }
+
+  const search =
+    typeof req.query.search === "string"
+      ? req.query.search.trim()
+      : "";
+
+  const categoryId =
+    typeof req.query.categoryId === "string" &&
+    req.query.categoryId !== ""
+      ? Number(req.query.categoryId)
+      : undefined;
+
+  const relatedSystemId =
+    typeof req.query.relatedSystemId === "string" &&
+    req.query.relatedSystemId !== ""
+      ? Number(req.query.relatedSystemId)
+      : undefined;
+
+  const priority =
+    typeof req.query.priority === "string"
+      ? req.query.priority
+      : undefined;
+
+  const status =
+    typeof req.query.status === "string"
+      ? req.query.status
+      : undefined;
+
+  const sort =
+    typeof req.query.sort === "string"
+      ? req.query.sort
+      : "updatedDesc";
+
+  const page =
+    typeof req.query.page === "string"
+      ? Number(req.query.page)
+      : 1;
+
+  const pageSize =
+    typeof req.query.pageSize === "string"
+      ? Number(req.query.pageSize)
+      : 10;
+
+  if (
+    categoryId !== undefined &&
+    (!Number.isInteger(categoryId) || categoryId <= 0)
+  ) {
+    return res.status(400).json({
+      error: "Invalid categoryId",
+    });
+  }
+
+  if (
+    relatedSystemId !== undefined &&
+    (!Number.isInteger(relatedSystemId) || relatedSystemId <= 0)
+  ) {
+    return res.status(400).json({
+      error: "Invalid relatedSystemId",
+    });
+  }
+
+  if (
+    priority !== undefined &&
+    !["LOW", "MEDIUM", "HIGH"].includes(priority)
+  ) {
+    return res.status(400).json({
+      error: "Invalid priority",
+    });
+  }
+
+  if (status !== undefined && status !== "NEW") {
+    return res.status(400).json({
+      error: "Invalid status",
+    });
+  }
+
+  if (!["updatedDesc", "ticketDate", "ticketNumber", "priority"].includes(sort)) {
+    return res.status(400).json({
+      error: "Invalid sort",
+    });
+  }
+
+  if (!Number.isInteger(page) || page < 1) {
+    return res.status(400).json({
+      error: "Invalid page",
+    });
+  }
+
+  if (![10, 20, 50].includes(pageSize)) {
+    return res.status(400).json({
+      error: "Invalid pageSize",
+    });
+  }
+
+  try {
+    const prisma = getPrisma();
+
+    const where = {
+      requesterId,
+      ...(search
+        ? {
+            OR: [
+              {
+                ticketNumber: {
+                  contains: search,
+                  mode: "insensitive" as const,
+                },
+              },
+              {
+                summary: {
+                  contains: search,
+                  mode: "insensitive" as const,
+                },
+              },
+            ],
+          }
+        : {}),
+      ...(categoryId !== undefined ? { categoryId } : {}),
+      ...(relatedSystemId !== undefined ? { relatedSystemId } : {}),
+      ...(priority !== undefined
+        ? {
+            requestedPriority:
+              priority as RequestedPriority,
+          }
+        : {}),
+      ...(status !== undefined
+        ? {
+            currentStatus: status as CurrentStatus,
+          }
+        : {}),
+    };
+
+    let orderBy;
+
+    switch (sort) {
+      case "ticketDate":
+        orderBy = { ticketDate: "desc" as const };
+        break;
+
+      case "ticketNumber":
+        orderBy = { ticketNumber: "asc" as const };
+        break;
+
+      case "priority":
+        orderBy = { requestedPriority: "asc" as const };
+        break;
+
+      case "updatedDesc":
+      default:
+        orderBy = { updatedAt: "desc" as const };
+        break;
+    }
+
+    const [total, items] = await Promise.all([
+      prisma.ticket.count({ where }),
+
+      prisma.ticket.findMany({
+        where,
+        orderBy,
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+        select: {
+          id: true,
+          ticketNumber: true,
+          ticketDate: true,
+          summary: true,
+          description: true,
+          requestedPriority: true,
+          currentStatus: true,
+          createdAt: true,
+          updatedAt: true,
+
+          requester: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+            },
+          },
+
+          category: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+
+          relatedSystem: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+        },
+      }),
+    ]);
+
+    res.status(200).json({
+      items,
+      page,
+      pageSize,
+      total,
+      totalPages: Math.ceil(total / pageSize),
+    });
+  } catch (error) {
+    console.error("Failed to fetch tickets:", error);
+
+    res.status(500).json({
+      error: "Failed to fetch tickets",
+    });
+  }
+});
 
 app.post("/api/tickets", async (req: Request, res: Response) => {
   const requesterHeader = req.header("X-Requester-Id");
