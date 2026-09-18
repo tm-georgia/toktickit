@@ -1,9 +1,20 @@
 import { getPrisma } from "../src/prisma.js";
+import { UserRole } from "@prisma/client";
+import { hashPassword } from "../src/auth/password.js";
 
 // Seed Lab 2 reference data.
 // Running the seed multiple times must NOT create duplicates.
 async function main() {
   const prisma = getPrisma();
+  const initialPassword = process.env.SEED_INITIAL_PASSWORD;
+
+  if (!initialPassword) {
+    throw new Error(
+      "SEED_INITIAL_PASSWORD must be set in server/.env for local development seeds."
+    );
+  }
+
+  const passwordHash = await hashPassword(initialPassword);
 
   const categories = [
     "Account and Access",
@@ -48,7 +59,12 @@ async function main() {
     });
   }
 
-  const developmentRequesters = [
+  const users: Array<{
+    name: string;
+    email: string;
+    role?: UserRole;
+    isActive: boolean;
+  }> = [
     {
       name: "Aung Aung",
       email: "aung@example.com",
@@ -74,20 +90,62 @@ async function main() {
       email: "inactive@example.com",
       isActive: false,
     },
+    {
+      name: "Nandar IT",
+      email: "nandar.it@example.com",
+      role: UserRole.IT_STAFF,
+      isActive: true,
+    },
+    {
+      name: "Inactive IT",
+      email: "inactive.it@example.com",
+      role: UserRole.IT_STAFF,
+      isActive: false,
+    },
+    {
+      name: "Local Administrator",
+      email: "admin@example.com",
+      role: UserRole.ADMINISTRATOR,
+      isActive: true,
+    },
   ];
 
-  for (const requester of developmentRequesters) {
-    await prisma.developmentRequester.upsert({
-      where: { email: requester.email },
-      update: {
-        name: requester.name,
-        isActive: requester.isActive,
+  for (const user of users) {
+    const role = user.role ?? UserRole.REQUESTER;
+    const existingUser = await prisma.user.findFirst({
+      where: {
+        email: {
+          equals: user.email,
+          mode: "insensitive",
+        },
       },
-      create: requester,
+      select: { id: true },
     });
+
+    const data = {
+      name: user.name,
+      role,
+      isActive: user.isActive,
+      passwordHash,
+      mustChangePassword: true,
+    };
+
+    if (existingUser) {
+      await prisma.user.update({
+        where: { id: existingUser.id },
+        data,
+      });
+    } else {
+      await prisma.user.create({
+        data: {
+          ...data,
+          email: user.email.toLowerCase(),
+        },
+      });
+    }
   }
 
-  console.log("Lab 2 reference data seeded successfully.");
+  console.log("Lab 3 local development reference data seeded successfully.");
 }
 
 main()

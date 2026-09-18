@@ -17,6 +17,12 @@ enum CurrentStatus {
   NEW
 }
 
+enum UserRole {
+  REQUESTER
+  IT_STAFF
+  ADMINISTRATOR
+}
+
 model Category {
   id        Int      @id @default(autoincrement())
   name      String   @unique
@@ -26,14 +32,19 @@ model Category {
   tickets Ticket[]
 }
 
-model DevelopmentRequester {
-  id        Int      @id @default(autoincrement())
-  name      String
-  email     String   @unique
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
+model User {
+  id                 Int       @id @default(autoincrement())
+  name               String
+  email              String    @unique
+  passwordHash       String
+  role               UserRole  @default(REQUESTER)
+  isActive           Boolean   @default(true)
+  mustChangePassword Boolean   @default(true)
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
 
-  tickets Ticket[]
+  tickets  Ticket[]
+  sessions Session[]
 }
 
 model RelatedSystem {
@@ -59,7 +70,7 @@ model Ticket {
   createdAt         DateTime          @default(now())
   updatedAt         DateTime          @updatedAt
 
-  requester     DevelopmentRequester @relation(fields: [requesterId], references: [id])
+  requester     User                 @relation(fields: [requesterId], references: [id])
   category      Category             @relation(fields: [categoryId], references: [id])
   relatedSystem RelatedSystem        @relation(fields: [relatedSystemId], references: [id])
   attachments   Attachment[]
@@ -68,6 +79,20 @@ model Ticket {
   @@index([updatedAt])
   @@index([categoryId])
   @@index([relatedSystemId])
+}
+
+model Session {
+  id        Int      @id @default(autoincrement())
+  tokenHash String   @unique
+  userId    Int
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
 }
 
 model Attachment {
