@@ -1,18 +1,39 @@
-import { describe, it, expect } from "vitest";
+import { afterAll, beforeAll, describe, it, expect } from "vitest";
 import request from "supertest";
+import { UserRole } from "@prisma/client";
 import { app } from "../../src/app.js";
+import { hashPassword } from "../../src/auth/password.js";
+import { getPrisma } from "../../src/prisma.js";
 
-void request;
-void app;
+const prisma = getPrisma();
+const email = `categories-test-${Date.now()}@example.test`;
+const password = "CategoriesTest123";
+let agent: ReturnType<typeof request.agent>;
 
-// Issue 4 — write this test yourself, using health.test.ts as the pattern.
-// Requires the DB to be migrated and seeded first.
-// It should assert: GET /api/categories returns 200 and the four seeded
-// category names in id order.
+beforeAll(async () => {
+  await prisma.user.create({
+    data: {
+      name: "Categories Test Requester",
+      email,
+      passwordHash: await hashPassword(password),
+      role: UserRole.REQUESTER,
+      isActive: true,
+      mustChangePassword: false,
+    },
+  });
+  agent = request.agent(app);
+  await agent.post("/auth/login").send({ email, password }).expect(200);
+});
+
+afterAll(async () => {
+  await prisma.user.deleteMany({ where: { email } });
+  await prisma.$disconnect();
+});
+
 
 describe("GET /api/categories", () => {
   it("returns the four seeded categories in id order", async () => {
-    const response = await request(app)
+    const response = await agent
       .get("/api/categories")
       .expect(200);
 

@@ -2,17 +2,21 @@ import { describe, expect, it, beforeAll, afterAll } from "vitest";
 import request from "supertest";
 import app from "../../src/app.js";
 import { getPrisma } from "../../src/prisma.js";
+import { hashPassword } from "../../src/auth/password.js";
 
 const prisma = getPrisma();
 
 let requesterId: number;
 let categoryId: number;
 let relatedSystemId: number;
+let agent: ReturnType<typeof request.agent>;
+const testPassword = "LabTwoRequester123";
 
 beforeAll(async () => {
-  const requester = await prisma.developmentRequester.findFirst({
+  const requester = await prisma.user.findFirst({
     where: {
       isActive: true,
+      role: "REQUESTER",
     },
     orderBy: {
       id: "asc",
@@ -46,6 +50,20 @@ beforeAll(async () => {
   requesterId = requester.id;
   categoryId = category.id;
   relatedSystemId = relatedSystem.id;
+
+  await prisma.user.update({
+    where: { id: requesterId },
+    data: {
+      passwordHash: await hashPassword(testPassword),
+      mustChangePassword: false,
+    },
+  });
+
+  agent = request.agent(app);
+  await agent.post("/auth/login").send({
+    email: requester.email,
+    password: testPassword,
+  }).expect(200);
 });
 
 afterAll(async () => {
@@ -54,9 +72,8 @@ afterAll(async () => {
 
 describe("POST /api/tickets", () => {
   it("creates a valid ticket with backend-generated values", async () => {
-    const response = await request(app)
+    const response = await agent
       .post("/api/tickets")
-      .set("X-Requester-Id", String(requesterId))
       .send({
         requesterId,
         categoryId,
@@ -106,9 +123,8 @@ describe("POST /api/tickets", () => {
   });
 
   it("trims summary and description before storing", async () => {
-    const response = await request(app)
+    const response = await agent
       .post("/api/tickets")
-      .set("X-Requester-Id", String(requesterId))
       .send({
         requesterId,
         categoryId,
@@ -130,8 +146,8 @@ describe("POST /api/tickets", () => {
     );
   });
 
-  it("rejects a missing requester header", async () => {
-    const response = await request(app)
+  it("does not require a requester header", async () => {
+    const response = await agent
       .post("/api/tickets")
       .send({
         requesterId,
@@ -143,22 +159,16 @@ describe("POST /api/tickets", () => {
         requestedPriority: "LOW",
       });
 
-    expect(response.status).toBe(400);
-
-    expect(response.body.error).toBe(
-      "Validation failed"
-    );
-
-    expect(response.body.details).toContain(
-      "X-Requester-Id header is required"
-    );
+    expect(response.status).toBe(201);
+    expect(response.body.requester.id).toBe(requesterId);
   });
 
-  it("rejects a requester ID mismatch", async () => {
+  it("ignores a client requester ID", async () => {
     const differentRequester =
-      await prisma.developmentRequester.findFirst({
+      await prisma.user.findFirst({
         where: {
           isActive: true,
+          role: "REQUESTER",
           id: {
             not: requesterId,
           },
@@ -174,9 +184,10 @@ describe("POST /api/tickets", () => {
       );
     }
 
-    const response = await request(app)
+    // A legacy client can send this header, but it cannot affect ownership.
+    const response = await agent
       .post("/api/tickets")
-      .set("X-Requester-Id", String(requesterId))
+
       .send({
         requesterId: differentRequester.id,
         categoryId,
@@ -187,18 +198,16 @@ describe("POST /api/tickets", () => {
         requestedPriority: "LOW",
       });
 
-    expect(response.status).toBe(400);
-
-    expect(response.body.details).toContain(
-      "requesterId must match X-Requester-Id"
-    );
+    expect(response.status).toBe(201);
+    expect(response.body.requester.id).toBe(requesterId);
   });
 
-  it("rejects an inactive requester", async () => {
+  it("does not let an inactive requester ID override the session", async () => {
     const inactiveRequester =
-      await prisma.developmentRequester.findFirst({
+      await prisma.user.findFirst({
         where: {
           isActive: false,
+          role: "REQUESTER",
         },
       });
 
@@ -208,12 +217,8 @@ describe("POST /api/tickets", () => {
       );
     }
 
-    const response = await request(app)
+    const response = await agent
       .post("/api/tickets")
-      .set(
-        "X-Requester-Id",
-        String(inactiveRequester.id)
-      )
       .send({
         requesterId: inactiveRequester.id,
         categoryId,
@@ -224,17 +229,13 @@ describe("POST /api/tickets", () => {
         requestedPriority: "LOW",
       });
 
-    expect(response.status).toBe(400);
-
-    expect(response.body.details).toContain(
-      "Requester does not exist or is inactive"
-    );
+    expect(response.status).toBe(201);
+    expect(response.body.requester.id).toBe(requesterId);
   });
 
   it("rejects an invalid summary", async () => {
-    const response = await request(app)
+    const response = await agent
       .post("/api/tickets")
-      .set("X-Requester-Id", String(requesterId))
       .send({
         requesterId,
         categoryId,
@@ -257,9 +258,8 @@ describe("POST /api/tickets", () => {
   });
 
   it("rejects an invalid description", async () => {
-    const response = await request(app)
+    const response = await agent
       .post("/api/tickets")
-      .set("X-Requester-Id", String(requesterId))
       .send({
         requesterId,
         categoryId,
@@ -277,9 +277,8 @@ describe("POST /api/tickets", () => {
   });
 
   it("rejects an invalid priority", async () => {
-    const response = await request(app)
+    const response = await agent
       .post("/api/tickets")
-      .set("X-Requester-Id", String(requesterId))
       .send({
         requesterId,
         categoryId,
@@ -298,9 +297,8 @@ describe("POST /api/tickets", () => {
   });
 
   it("rejects a nonexistent category", async () => {
-    const response = await request(app)
+    const response = await agent
       .post("/api/tickets")
-      .set("X-Requester-Id", String(requesterId))
       .send({
         requesterId,
         categoryId: 999999,
@@ -319,9 +317,8 @@ describe("POST /api/tickets", () => {
   });
 
   it("rejects a nonexistent related system", async () => {
-    const response = await request(app)
+    const response = await agent
       .post("/api/tickets")
-      .set("X-Requester-Id", String(requesterId))
       .send({
         requesterId,
         categoryId,
@@ -340,9 +337,8 @@ describe("POST /api/tickets", () => {
   });
 
   it("generates unique ticket numbers", async () => {
-    const firstResponse = await request(app)
+    const firstResponse = await agent
       .post("/api/tickets")
-      .set("X-Requester-Id", String(requesterId))
       .send({
         requesterId,
         categoryId,
@@ -353,9 +349,8 @@ describe("POST /api/tickets", () => {
         requestedPriority: "LOW",
       });
 
-    const secondResponse = await request(app)
+    const secondResponse = await agent
       .post("/api/tickets")
-      .set("X-Requester-Id", String(requesterId))
       .send({
         requesterId,
         categoryId,
