@@ -13,8 +13,21 @@ enum RequestedPriority {
   HIGH
 }
 
+enum ItPriority {
+  LOW
+  MEDIUM
+  HIGH
+}
+
 enum CurrentStatus {
   NEW
+  OPEN
+  IN_PROGRESS
+  WAITING_FOR_REQUESTER
+  RESOLVED
+  CLOSED
+  REOPENED
+  CANCELLED
 }
 
 enum UserRole {
@@ -43,8 +56,11 @@ model User {
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
 
-  tickets  Ticket[]
-  sessions Session[]
+  tickets          Ticket[]
+assignedTickets  Ticket[]        @relation("AssignedTickets")
+publicComments   PublicComment[] @relation("PublicCommentAuthors")
+internalNotes    InternalNote[]  @relation("InternalNoteAuthors")
+sessions         Session[]
 }
 
 model RelatedSystem {
@@ -61,6 +77,8 @@ model Ticket {
   ticketNumber      String            @unique
   ticketDate        DateTime          @default(now())
   requesterId       Int
+  assignedStaffId   Int?
+  itPriority        ItPriority?
   categoryId        Int
   relatedSystemId   Int
   summary           String
@@ -71,14 +89,18 @@ model Ticket {
   updatedAt         DateTime          @updatedAt
 
   requester     User                 @relation(fields: [requesterId], references: [id])
+  assignedStaff User?                @relation("AssignedTickets", fields: [assignedStaffId], references: [id])
   category      Category             @relation(fields: [categoryId], references: [id])
   relatedSystem RelatedSystem        @relation(fields: [relatedSystemId], references: [id])
   attachments   Attachment[]
+  publicComments PublicComment[]
+  internalNotes  InternalNote[]
 
   @@index([requesterId])
   @@index([updatedAt])
   @@index([categoryId])
   @@index([relatedSystemId])
+  @@index([assignedStaffId])
 }
 
 model Session {
@@ -110,4 +132,34 @@ model Attachment {
   ticket Ticket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
 
   @@index([ticketId])
+}
+
+model PublicComment {
+  id        Int      @id @default(autoincrement())
+  ticketId  Int
+  authorId  Int
+  body      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  ticket Ticket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  author User   @relation("PublicCommentAuthors", fields: [authorId], references: [id])
+
+  @@index([ticketId])
+  @@index([authorId])
+}
+
+model InternalNote {
+  id        Int      @id @default(autoincrement())
+  ticketId  Int
+  authorId  Int
+  body      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  ticket Ticket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  author User   @relation("InternalNoteAuthors", fields: [authorId], references: [id])
+
+  @@index([ticketId])
+  @@index([authorId])
 }
