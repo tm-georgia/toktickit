@@ -477,17 +477,32 @@ app.post("/api/tickets", async (req: Request, res: Response) => {
             hashtext(${prefix})
           )
         `;
-        // Count today's tickets.
-        const ticketCount =
-          await tx.ticket.count({
-            where: {
-              ticketNumber: {
-                startsWith: prefix,
-              },
-            },
-          });
-        const sequenceNumber =
-          ticketCount + 1;
+        // Find the highest existing sequence number for today.
+const todaysTickets = await tx.ticket.findMany({
+  where: {
+    ticketNumber: {
+      startsWith: prefix,
+    },
+  },
+  select: {
+    ticketNumber: true,
+  },
+});
+
+const highestSequenceNumber = todaysTickets.reduce(
+  (highest, current) => {
+    const sequence = Number(
+      current.ticketNumber.slice(prefix.length)
+    );
+    return Number.isFinite(sequence)
+      ? Math.max(highest, sequence)
+      : highest;
+  },
+  0
+);
+
+const sequenceNumber =
+  highestSequenceNumber + 1;
         if (sequenceNumber > 9999) {
           throw new Error(
             "Daily ticket number limit reached"
