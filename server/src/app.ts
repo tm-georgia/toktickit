@@ -6,6 +6,7 @@ import { getPrisma } from "./prisma.js";
 import { loadAuthentication, requireAuthentication, requirePasswordChangeCompleted } from "./auth/middleware.js";
 import { authRouter } from "./routes/auth.js";
 import { itStaffRouter } from "./routes/it-staff.js";
+import { adminRouter } from "./routes/admin.js";
 // The Express app is exported separately from app.listen() (see index.ts)
 // so Supertest can import `app` without opening a port.
 export const app = express();
@@ -17,6 +18,7 @@ app.use(express.json());
 app.use(loadAuthentication);
 app.use("/auth", authRouter);
 app.use("/api/it-staff", itStaffRouter);
+app.use("/api/admin", adminRouter);
 const upload = multer({
   dest: "uploads/",
 });
