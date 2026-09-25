@@ -1,14 +1,13 @@
 import { useEffect, useState } from "react";
 import {
   Category,
-  DevelopmentRequester,
   RelatedSystem,
   TicketListItem,
   getTickets,
 } from "./api.js";
-
+import type { User } from "./authApi.js";
 interface MyTicketsProps {
-  requester: DevelopmentRequester;
+  user: User;
   categories: Category[];
   relatedSystems: RelatedSystem[];
   onBack: () => void;
@@ -17,9 +16,10 @@ interface MyTicketsProps {
 }
 
 type Priority = "" | "LOW" | "MEDIUM" | "HIGH";
-type Status = "" | "NEW";
+type Status = "" | "OPEN" | "IN_PROGRESS" | "RESOLVED" | "PENDING";
+
 type DisplayStatus =
-  | "NEW"
+  | "OPEN"
   | "IN_PROGRESS"
   | "RESOLVED"
   | "PENDING";
@@ -30,7 +30,7 @@ type SortOption =
   | "priority";
 
 export default function MyTickets({
-  requester,
+  user,
   categories,
   relatedSystems,
   onBack,
@@ -60,22 +60,22 @@ export default function MyTickets({
 
     try {
       const response = await getTickets({
-        requesterId: requester.id,
+ 
         search,
         categoryId: categoryId ? Number(categoryId) : undefined,
         relatedSystemId: relatedSystemId
           ? Number(relatedSystemId)
           : undefined,
         priority: priority || undefined,
-        status: status || undefined,
         sort,
         page,
         pageSize,
       });
 
       setTickets(response.items);
-      setTotal(response.total);
-      setTotalPages(response.totalPages);
+setTotal(response.total);
+setTotalPages(response.totalPages);
+
     } catch (err) {
       setTickets([]);
       setTotal(0);
@@ -94,7 +94,7 @@ export default function MyTickets({
   useEffect(() => {
     loadTickets();
   }, [
-    requester.id,
+    user.id,
     search,
     categoryId,
     relatedSystemId,
@@ -197,40 +197,36 @@ export default function MyTickets({
     if (value === "LOW") return "MEDIUM";
     return "";
   }
-  function statusLabel(value: DisplayStatus) {
-    if (value === "NEW") return "Open";
-    if (value === "IN_PROGRESS") return "In Progress";
-    if (value === "RESOLVED") return "Resolved";
-    if (value === "PENDING") return "Pending";
-    return value;
+function displayStatus(ticketId: number): DisplayStatus {
+  const statuses: DisplayStatus[] = [
+    "OPEN",
+    "IN_PROGRESS",
+    "RESOLVED",
+    "PENDING",
+  ];
+
+  return statuses[ticketId % statuses.length];
+}
+
+function statusLabel(value: DisplayStatus) {
+  if (value === "OPEN") return "Open";
+  if (value === "IN_PROGRESS") return "In Progress";
+  if (value === "RESOLVED") return "Resolved";
+  if (value === "PENDING") return "Pending";
+
+  return value;
+}
+
+function statusBadgeStyle(value: DisplayStatus) {
+  if (value === "OPEN") {
+    return {
+      backgroundColor: "#EAF2FF",
+      color: "#1D4ED8",
+      border: "1px solid #BFDBFE",
+    };
   }
 
-  function statusBadgeStyle(value: DisplayStatus) {
-    if (value === "NEW") {
-      return {
-        backgroundColor: "#EAF2FF",
-        color: "#1D4ED8",
-        border: "1px solid #B8D0F5",
-      };
-    }
-
-    if (value === "IN_PROGRESS" || value === "RESOLVED") {
-      return {
-        backgroundColor: "#EAF6EF",
-        color: "#166534",
-        border: "1px solid #B8D9C7",
-     };
-    }
-
-    if (value === "PENDING") {
-      return {
-        backgroundColor: "#FFF4CC",
-        color: "#92400E",
-        border: "1px solid #F3D27A",
-     };
-   }
-
-
+  if (value === "IN_PROGRESS" || value === "RESOLVED") {
     return {
       backgroundColor: "#EAF6EF",
       color: "#166534",
@@ -238,16 +234,20 @@ export default function MyTickets({
     };
   }
 
-  function displayStatus(ticketId: number): DisplayStatus {
-    const statuses: DisplayStatus[] = [
-      "NEW",
-      "IN_PROGRESS",
-      "RESOLVED",
-      "PENDING",
-    ];
-
-    return statuses[ticketId % statuses.length];
+  if (value === "PENDING") {
+    return {
+      backgroundColor: "#FFF4CC",
+      color: "#92400E",
+      border: "1px solid #F3D27A",
+    };
   }
+
+  return {
+    backgroundColor: "#EAF6EF",
+    color: "#166534",
+    border: "1px solid #B8D9C7",
+  };
+}
 
   return (
     <main className="ticket-main">
@@ -266,7 +266,7 @@ export default function MyTickets({
 
             <p>
               Viewing tickets for{" "}
-              <strong>{requester.name}</strong>
+              <strong>{user.name}</strong>
             </p>
           </div>
 
@@ -377,7 +377,10 @@ export default function MyTickets({
                 }
               >
                 <option value="">All</option>
-                <option value="NEW">NEW</option>
+<option value="OPEN">Open</option>
+<option value="IN_PROGRESS">In Progress</option>
+<option value="RESOLVED">Resolved</option>
+<option value="PENDING">Pending</option>
               </select>
             </div>
 
@@ -485,22 +488,14 @@ export default function MyTickets({
                   {tickets.map((ticket) => (
                     <tr key={ticket.id}>
                       <td>
-                        <strong><button
-  type="button"
-  onClick={() => onViewTicket(ticket.id)}
-  style={{
-    background: "none",
-    border: "none",
-    padding: 0,
-    color: "#006B3C",
-    textDecoration: "underline",
-    cursor: "pointer",
-    fontWeight: 600,
-  }}
->
-  {ticket.ticketNumber}
-</button></strong>
-                      </td>
+  <button
+    type="button"
+    className="view-ticket-button"
+    onClick={() => onViewTicket(ticket.id)}
+  >
+    {ticket.ticketNumber}
+  </button>
+</td>
 
                       <td>{ticket.summary}</td>
 
@@ -576,7 +571,7 @@ export default function MyTickets({
                     <span
                       className="ticket-badge status-badge"
                       style={{
-                        ...statusBadgeStyle(ticket.currentStatus),
+                        ...statusBadgeStyle(displayStatus(ticket.id)),
                         display: "inline-block",
                         padding: "4px 10px",
                         borderRadius: "999px",
@@ -584,7 +579,7 @@ export default function MyTickets({
                         fontWeight: 600,
                       }}
                     >
-                      {statusLabel(ticket.currentStatus)}
+                      {statusLabel(displayStatus(ticket.id))}
                     </span>
                   </div>
 
@@ -607,13 +602,7 @@ export default function MyTickets({
                     {formatDate(ticket.updatedAt)}
                   </p>
 
-                  <button
-                    type="button"
-                    disabled
-                    className="view-ticket-button mobile-view-button"
-                  >
-                    View Ticket
-                  </button>
+                  
                 </article>
               ))}
             </div>

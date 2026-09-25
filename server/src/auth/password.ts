@@ -10,8 +10,20 @@ export function validatePassword(password: string): string | null {
     return "Password must be at least 12 characters.";
   }
 
-  if (!/[a-z]/.test(password) || !/[A-Z]/.test(password) || !/\d/.test(password)) {
-    return "Password must include uppercase, lowercase, and numeric characters.";
+  if (!/[a-z]/.test(password)) {
+    return "Password must include at least one lowercase letter.";
+  }
+
+  if (!/[A-Z]/.test(password)) {
+    return "Password must include at least one uppercase letter.";
+  }
+
+  if (!/\d/.test(password)) {
+    return "Password must include at least one numeric character.";
+  }
+
+  if (!/[^A-Za-z0-9]/.test(password)) {
+    return "Password must include at least one special character.";
   }
 
   return null;

@@ -23,7 +23,6 @@ export interface DevelopmentRequester {
 }
 
 export interface CreateTicketInput {
-  requesterId: number;
   categoryId: number;
   relatedSystemId: number;
   summary: string;
@@ -76,7 +75,6 @@ export interface TicketListItem {
 }
 
 export interface GetTicketsParams {
-  requesterId: number;
   search?: string;
   categoryId?: number;
   relatedSystemId?: number;
@@ -112,7 +110,10 @@ export async function getDevelopmentRequesters(): Promise<
 // Issue 17 — load active categories for Create Ticket.
 export async function getCategories(): Promise<Category[]> {
   const response = await fetch(
-    `${API_URL}/api/categories`
+    `${API_URL}/api/categories`,
+    {
+    credentials: "include",
+  }
   );
 
   if (!response.ok) {
@@ -127,7 +128,10 @@ export async function getRelatedSystems(): Promise<
   RelatedSystem[]
 > {
   const response = await fetch(
-    `${API_URL}/api/related-systems`
+    `${API_URL}/api/related-systems`,
+    {
+    credentials: "include",
+  }
   );
 
   if (!response.ok) {
@@ -147,9 +151,10 @@ export async function createTicket(
     `${API_URL}/api/tickets`,
     {
       method: "POST",
+      credentials: "include",
       headers: {
         "Content-Type": "application/json",
-        "X-Requester-Id": String(ticket.requesterId),
+    
       },
       body: JSON.stringify(ticket),
     }
@@ -185,8 +190,6 @@ export async function getTickets(
   params: GetTicketsParams
 ): Promise<TicketListResponse> {
   const query = new URLSearchParams();
-
-  query.set("requesterId", String(params.requesterId));
 
   if (params.search) {
     query.set("search", params.search);
@@ -226,9 +229,7 @@ export async function getTickets(
   const response = await fetch(
     `${API_URL}/api/tickets?${query.toString()}`,
     {
-      headers: {
-        "X-Requester-Id": String(params.requesterId),
-      },
+      credentials: "include",
     }
   );
 
@@ -270,7 +271,6 @@ export async function checkSystem(): Promise<SystemStatus> {
 }
 export async function uploadAttachment(
   ticketId: number,
-  requesterId: number,
   file: File
 ): Promise<Attachment> {
   const formData = new FormData();
@@ -280,9 +280,6 @@ export async function uploadAttachment(
     `${API_URL}/api/tickets/${ticketId}/attachments`,
     {
       method: "POST",
-      headers: {
-        "X-Requester-Id": String(requesterId),
-      },
       body: formData,
     }
   );
@@ -313,15 +310,11 @@ export function getAttachmentDownloadUrl(
 export async function removeAttachment(
   ticketId: number,
   attachmentId: number,
-  requesterId: number
 ): Promise<Attachment> {
   const response = await fetch(
     `${API_URL}/api/tickets/${ticketId}/attachments/${attachmentId}`,
     {
       method: "DELETE",
-      headers: {
-        "X-Requester-Id": String(requesterId),
-      },
     }
   );
 
@@ -342,15 +335,12 @@ export async function removeAttachment(
 }
 
 export async function getTicketById(
-  ticketId: number,
-  requesterId: number
+  ticketId: number
 ): Promise<CreatedTicket> {
   const response = await fetch(
     `${API_URL}/api/tickets/${ticketId}`,
     {
-      headers: {
-        "X-Requester-Id": String(requesterId),
-      },
+      credentials: "include",
     }
   );
 

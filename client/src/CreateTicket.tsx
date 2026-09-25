@@ -1,0 +1,950 @@
+import { useEffect, useState } from "react";
+import {
+  Category,
+  CreateTicketInput,
+  RelatedSystem,
+  createTicket,
+  getCategories,
+  getRelatedSystems,
+} from "./api.js";
+import type { User } from "./authApi.js";
+
+type FormErrors = {
+  categoryId?: string;
+  relatedSystemId?: string;
+  summary?: string;
+  description?: string;
+  requestedPriority?: string;
+};
+
+const EMPTY_ERRORS: FormErrors = {};
+
+const inputStyle = {
+  width: "100%",
+  boxSizing: "border-box" as const,
+  padding: "11px 12px",
+  border: "1px solid #AFC7BA",
+  borderRadius: "6px",
+  backgroundColor: "white",
+  color: "#17352A",
+  fontSize: "16px",
+};
+
+const labelStyle = {
+  display: "block",
+  fontWeight: 600,
+  marginBottom: "8px",
+};
+
+const errorStyle = {
+  color: "#9B2C2C",
+  fontSize: "14px",
+  marginTop: "6px",
+  marginBottom: 0,
+};
+
+export default function CreateTicket({
+  user,
+  categories: initialCategories,
+  relatedSystems: initialRelatedSystems,
+  onBack,
+  onCreated,
+}: {
+  user: User;
+  categories: Category[];
+  relatedSystems: RelatedSystem[];
+  onBack: () => void;
+  onCreated: () => void;
+}) {
+  const [categories, setCategories] =
+    useState<Category[]>(initialCategories);
+
+  const [relatedSystems, setRelatedSystems] =
+    useState<RelatedSystem[]>(initialRelatedSystems);
+
+  const [referenceLoading, setReferenceLoading] =
+    useState(false);
+
+  const [referenceError, setReferenceError] =
+    useState(false);
+
+  const [categoryId, setCategoryId] =
+    useState("");
+
+  const [relatedSystemId, setRelatedSystemId] =
+    useState("");
+
+  const [requestedPriority, setRequestedPriority] =
+    useState<CreateTicketInput["requestedPriority"]>("MEDIUM");
+
+  const [summary, setSummary] =
+    useState("");
+
+  const [description, setDescription] =
+    useState("");
+
+  const [errors, setErrors] =
+    useState<FormErrors>(EMPTY_ERRORS);
+
+  const [submitError, setSubmitError] =
+    useState("");
+
+  const [submitting, setSubmitting] =
+    useState(false);
+
+  const [createdTicket, setCreatedTicket] =
+    useState<Awaited<ReturnType<typeof createTicket>> | null>(null);
+
+  useEffect(() => {
+    if (
+      initialCategories.length > 0 &&
+      initialRelatedSystems.length > 0
+    ) {
+      return;
+    }
+
+    loadReferenceData();
+  }, [initialCategories, initialRelatedSystems]);
+
+  async function loadReferenceData() {
+    setReferenceLoading(true);
+    setReferenceError(false);
+
+    try {
+      const [
+        categoryResult,
+        relatedSystemResult,
+      ] = await Promise.all([
+        getCategories(),
+        getRelatedSystems(),
+      ]);
+
+      setCategories(categoryResult);
+      setRelatedSystems(relatedSystemResult);
+    } catch (error) {
+      console.error(
+        "Failed to load ticket reference data:",
+        error,
+      );
+
+      setReferenceError(true);
+    } finally {
+      setReferenceLoading(false);
+    }
+  }
+
+  function resetForm() {
+    setCategoryId("");
+    setRelatedSystemId("");
+    setRequestedPriority("MEDIUM");
+    setSummary("");
+    setDescription("");
+    setErrors(EMPTY_ERRORS);
+    setSubmitError("");
+    setCreatedTicket(null);
+  }
+
+  function validateForm(): FormErrors {
+    const newErrors: FormErrors = {};
+
+    if (!categoryId) {
+      newErrors.categoryId =
+        "Category is required.";
+    }
+
+    if (!relatedSystemId) {
+      newErrors.relatedSystemId =
+        "Related System is required.";
+    }
+
+    const trimmedSummary = summary.trim();
+
+    if (!trimmedSummary) {
+      newErrors.summary =
+        "Summary is required.";
+    } else if (trimmedSummary.length < 5) {
+      newErrors.summary =
+        "Summary must be at least 5 characters.";
+    } else if (trimmedSummary.length > 200) {
+      newErrors.summary =
+        "Summary must not exceed 200 characters.";
+    }
+
+    const trimmedDescription =
+      description.trim();
+
+    if (!trimmedDescription) {
+      newErrors.description =
+        "Description is required.";
+    } else if (trimmedDescription.length < 10) {
+      newErrors.description =
+        "Description must be at least 10 characters.";
+    } else if (trimmedDescription.length > 2000) {
+      newErrors.description =
+        "Description must not exceed 2000 characters.";
+    }
+
+    if (
+      requestedPriority !== "LOW" &&
+      requestedPriority !== "MEDIUM" &&
+      requestedPriority !== "HIGH"
+    ) {
+      newErrors.requestedPriority =
+        "Requested Priority is required.";
+    }
+
+    return newErrors;
+  }
+
+  async function handleCreateTicket(
+    event: React.FormEvent<HTMLFormElement>,
+  ) {
+    event.preventDefault();
+
+    const validationErrors =
+      validateForm();
+
+    setErrors(validationErrors);
+    setSubmitError("");
+
+    if (
+      Object.keys(validationErrors).length > 0
+    ) {
+      return;
+    }
+
+    setSubmitting(true);
+
+    try {
+      const ticket = await createTicket({
+        categoryId: Number(categoryId),
+        relatedSystemId: Number(
+          relatedSystemId,
+        ),
+        summary: summary.trim(),
+        description: description.trim(),
+        requestedPriority,
+      });
+
+      setCreatedTicket(ticket);
+    } catch (error) {
+      console.error(
+        "Failed to create ticket:",
+        error,
+      );
+
+      setSubmitError(
+        error instanceof Error
+          ? error.message
+          : "Unable to create ticket. Please try again.",
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <main
+      className="ticket-main"
+      style={{
+        maxWidth: "1140px",
+        margin: "0 auto",
+        padding: "32px 20px",
+      }}
+    >
+      <section
+        className="ticket-card"
+        style={{
+          backgroundColor: "white",
+          border: "1px solid #D8E5DE",
+          borderRadius: "12px",
+          padding: "28px",
+          boxShadow:
+            "0 2px 8px rgba(0, 0, 0, 0.06)",
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            gap: "16px",
+            flexWrap: "wrap",
+            marginBottom: "24px",
+          }}
+        >
+          <div>
+            <h2
+              style={{
+                color: "#006B3C",
+                margin: 0,
+              }}
+            >
+              Create Ticket
+            </h2>
+
+            <p
+              style={{
+                marginBottom: 0,
+                color: "#53685D",
+              }}
+            >
+              Submit a new IT support request.
+            </p>
+          </div>
+        <div className="home-actions">
+          <button
+            type="button"
+            onClick={onBack}
+            disabled={submitting}
+          >
+            Back
+          </button>
+        </div>
+        </div>
+
+        {createdTicket ? (
+          <div>
+            <div
+              role="status"
+              aria-live="polite"
+              style={{
+                backgroundColor: "#EAF6EF",
+                border: "1px solid #B8D9C7",
+                borderRadius: "8px",
+                padding: "20px",
+                marginBottom: "24px",
+              }}
+            >
+              <h3
+                style={{
+                  color: "#006B3C",
+                  marginTop: 0,
+                }}
+              >
+                Ticket created successfully.
+              </h3>
+
+              <p
+                style={{
+                  marginBottom: "8px",
+                }}
+              >
+                Ticket Number:
+              </p>
+
+              <strong
+                style={{
+                  fontSize: "24px",
+                  color: "#006B3C",
+                }}
+              >
+                {createdTicket.ticketNumber}
+              </strong>
+
+              <p
+                style={{
+                  marginBottom: 0,
+                  marginTop: "12px",
+                }}
+              >
+                Ticket Date:{" "}
+                {new Date(
+                  createdTicket.ticketDate,
+                ).toLocaleString()}
+              </p>
+            </div>
+
+            <div
+              className="action-row"
+              style={{
+                display: "flex",
+                gap: "12px",
+                flexWrap: "wrap",
+              }}
+            >
+            <div className="home-actions">
+              <button
+                type="button"
+                onClick={onCreated}
+              >
+                My Tickets
+              </button>
+
+              <button
+                type="button"
+                onClick={resetForm}
+              >
+                Create Another Ticket
+              </button>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <form onSubmit={handleCreateTicket}>
+            <fieldset
+              disabled={
+                submitting ||
+                referenceLoading
+              }
+              style={{
+                border: "none",
+                padding: 0,
+                margin: 0,
+              }}
+            >
+              <legend
+                style={{
+                  fontSize: "18px",
+                  fontWeight: 700,
+                  color: "#006B3C",
+                  marginBottom: "16px",
+                }}
+              >
+                Ticket Information
+              </legend>
+
+              <div
+                className="classification-grid"
+                style={{
+                  display: "grid",
+                  gridTemplateColumns:
+                    "repeat(3, minmax(0, 1fr))",
+                  gap: "20px",
+                  marginBottom: "24px",
+                }}
+              >
+                <div>
+                  <label
+                    style={labelStyle}
+                  >
+                    Ticket Number
+                  </label>
+
+                  <div
+                    style={{
+                      ...inputStyle,
+                      backgroundColor: "#EEF2EF",
+                      color: "#64766C",
+                    }}
+                  >
+                    Generated after submission
+                  </div>
+                </div>
+
+                <div>
+                  <label
+                    style={labelStyle}
+                  >
+                    Ticket Date
+                  </label>
+
+                  <div
+                    style={{
+                      ...inputStyle,
+                      backgroundColor: "#EEF2EF",
+                      color: "#64766C",
+                    }}
+                  >
+                    Generated after submission
+                  </div>
+                </div>
+
+                <div>
+                  <label
+                    style={labelStyle}
+                  >
+                    Requester
+                  </label>
+
+                  <div
+                    style={{
+                      ...inputStyle,
+                      backgroundColor: "#F1F3EE",
+                      color: "#53685D",
+                    }}
+                  >
+                    {user.name}
+                  </div>
+                </div>
+              </div>
+            </fieldset>
+
+            {referenceLoading && (
+              <div
+                role="status"
+                aria-live="polite"
+                style={{
+                  backgroundColor: "#EAF6EF",
+                  padding: "14px",
+                  borderRadius: "8px",
+                  marginBottom: "20px",
+                }}
+              >
+                Loading Categories and Related
+                Systems...
+              </div>
+            )}
+
+            {referenceError && !referenceLoading && (
+              <div
+                role="alert"
+                style={{
+                  backgroundColor: "#FFF3F3",
+                  border: "1px solid #E3B8B8",
+                  padding: "16px",
+                  borderRadius: "8px",
+                  marginBottom: "20px",
+                }}
+              >
+                Unable to load Categories and
+                Related Systems. Please try again.
+
+                <div
+                  style={{
+                    marginTop: "12px",
+                  }}
+                >
+                  <button
+                    type="button"
+                    onClick={loadReferenceData}
+                  >
+                    Try Again
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {!referenceError && (
+              <>
+                <fieldset
+                  disabled={
+                    submitting ||
+                    referenceLoading
+                  }
+                  style={{
+                    border: "none",
+                    padding: 0,
+                    margin: 0,
+                  }}
+                >
+                  <legend
+                    style={{
+                      fontSize: "18px",
+                      fontWeight: 700,
+                      color: "#006B3C",
+                      marginBottom: "16px",
+                    }}
+                  >
+                    Classification
+                  </legend>
+
+                  <div
+                    className="classification-grid"
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns:
+                        "repeat(3, minmax(0, 1fr))",
+                      gap: "20px",
+                      marginBottom: "24px",
+                    }}
+                  >
+                    <div>
+                      <label
+                        htmlFor="category"
+                        style={labelStyle}
+                      >
+                        Category{" "}
+                        <span
+                          style={{
+                            color: "#9B2C2C",
+                          }}
+                        >
+                          *
+                        </span>
+                      </label>
+
+                      <select
+                        id="category"
+                        value={categoryId}
+                        onChange={(event) => {
+                          setCategoryId(
+                            event.target.value,
+                          );
+
+                          setErrors((current) => ({
+                            ...current,
+                            categoryId: undefined,
+                          }));
+                        }}
+                        aria-required="true"
+                        aria-invalid={Boolean(
+                          errors.categoryId,
+                        )}
+                        style={{
+                          ...inputStyle,
+                          borderColor:
+                            errors.categoryId
+                              ? "#9B2C2C"
+                              : "#AFC7BA",
+                        }}
+                      >
+                        <option value="">
+                          Select a category
+                        </option>
+
+                        {categories.map(
+                          (category) => (
+                            <option
+                              key={category.id}
+                              value={category.id}
+                            >
+                              {category.name}
+                            </option>
+                          ),
+                        )}
+                      </select>
+
+                      {errors.categoryId && (
+                        <p
+                          role="alert"
+                          style={errorStyle}
+                        >
+                          {errors.categoryId}
+                        </p>
+                      )}
+                    </div>
+
+                    <div>
+                      <label
+                        htmlFor="related-system"
+                        style={labelStyle}
+                      >
+                        Related System{" "}
+                        <span
+                          style={{
+                            color: "#9B2C2C",
+                          }}
+                        >
+                          *
+                        </span>
+                      </label>
+
+                      <select
+                        id="related-system"
+                        value={relatedSystemId}
+                        onChange={(event) => {
+                          setRelatedSystemId(
+                            event.target.value,
+                          );
+
+                          setErrors((current) => ({
+                            ...current,
+                            relatedSystemId:
+                              undefined,
+                          }));
+                        }}
+                        aria-required="true"
+                        aria-invalid={Boolean(
+                          errors.relatedSystemId,
+                        )}
+                        style={{
+                          ...inputStyle,
+                          borderColor:
+                            errors.relatedSystemId
+                              ? "#9B2C2C"
+                              : "#AFC7BA",
+                        }}
+                      >
+                        <option value="">
+                          Select a related system
+                        </option>
+
+                        {relatedSystems.map(
+                          (system) => (
+                            <option
+                              key={system.id}
+                              value={system.id}
+                            >
+                              {system.name}
+                            </option>
+                          ),
+                        )}
+                      </select>
+
+                      {errors.relatedSystemId && (
+                        <p
+                          role="alert"
+                          style={errorStyle}
+                        >
+                          {errors.relatedSystemId}
+                        </p>
+                      )}
+                    </div>
+
+                    <div>
+                      <label
+                        htmlFor="priority"
+                        style={labelStyle}
+                      >
+                        Requested Priority{" "}
+                        <span
+                          style={{
+                            color: "#9B2C2C",
+                          }}
+                        >
+                          *
+                        </span>
+                      </label>
+
+                      <select
+                        id="priority"
+                        value={requestedPriority}
+                        onChange={(event) => {
+                          setRequestedPriority(
+                            event.target
+                              .value as CreateTicketInput["requestedPriority"],
+                          );
+
+                          setErrors((current) => ({
+                            ...current,
+                            requestedPriority:
+                              undefined,
+                          }));
+                        }}
+                        aria-required="true"
+                        style={inputStyle}
+                      >
+                        <option value="LOW">
+                          LOW
+                        </option>
+                        <option value="MEDIUM">
+                          MEDIUM
+                        </option>
+                        <option value="HIGH">
+                          HIGH
+                        </option>
+                      </select>
+                    </div>
+                  </div>
+                </fieldset>
+
+                <fieldset
+                  disabled={
+                    submitting ||
+                    referenceLoading
+                  }
+                  style={{
+                    border: "none",
+                    padding: 0,
+                    margin: 0,
+                  }}
+                >
+                  <legend
+                    style={{
+                      fontSize: "18px",
+                      fontWeight: 700,
+                      color: "#006B3C",
+                      marginBottom: "16px",
+                    }}
+                  >
+                    Main Information
+                  </legend>
+
+                  <div
+                    style={{
+                      marginBottom: "20px",
+                    }}
+                  >
+                    <label
+                      htmlFor="summary"
+                      style={labelStyle}
+                    >
+                      Summary{" "}
+                      <span
+                        style={{
+                          color: "#9B2C2C",
+                        }}
+                      >
+                        *
+                      </span>
+                    </label>
+
+                    <input
+                      id="summary"
+                      type="text"
+                      value={summary}
+                      onChange={(event) => {
+                        setSummary(
+                          event.target.value,
+                        );
+
+                        setErrors((current) => ({
+                          ...current,
+                          summary: undefined,
+                        }));
+                      }}
+                      maxLength={200}
+                      aria-required="true"
+                      aria-invalid={Boolean(
+                        errors.summary,
+                      )}
+                      style={{
+                        ...inputStyle,
+                        borderColor:
+                          errors.summary
+                            ? "#9B2C2C"
+                            : "#AFC7BA",
+                      }}
+                    />
+
+                    <p
+                      style={{
+                        fontSize: "14px",
+                        color: "#53685D",
+                        marginTop: "6px",
+                        marginBottom: 0,
+                      }}
+                    >
+                      {summary.trim().length}/200
+                      {" "}characters
+                    </p>
+
+                    {errors.summary && (
+                      <p
+                        role="alert"
+                        style={errorStyle}
+                      >
+                        {errors.summary}
+                      </p>
+                    )}
+                  </div>
+
+                  <div
+                    style={{
+                      marginBottom: "24px",
+                    }}
+                  >
+                    <label
+                      htmlFor="description"
+                      style={labelStyle}
+                    >
+                      Description{" "}
+                      <span
+                        style={{
+                          color: "#9B2C2C",
+                        }}
+                      >
+                        *
+                      </span>
+                    </label>
+
+                    <textarea
+                      id="description"
+                      value={description}
+                      onChange={(event) => {
+                        setDescription(
+                          event.target.value,
+                        );
+
+                        setErrors((current) => ({
+                          ...current,
+                          description: undefined,
+                        }));
+                      }}
+                      rows={8}
+                      maxLength={2000}
+                      aria-required="true"
+                      aria-invalid={Boolean(
+                        errors.description,
+                      )}
+                      style={{
+                        ...inputStyle,
+                        minHeight: "160px",
+                        borderColor:
+                          errors.description
+                            ? "#9B2C2C"
+                            : "#AFC7BA",
+                      }}
+                    />
+
+                    <p
+                      style={{
+                        fontSize: "14px",
+                        color: "#53685D",
+                        marginTop: "6px",
+                        marginBottom: 0,
+                      }}
+                    >
+                      {description.trim().length}/2000
+                      {" "}characters
+                    </p>
+
+                    {errors.description && (
+                      <p
+                        role="alert"
+                        style={errorStyle}
+                      >
+                        {errors.description}
+                      </p>
+                    )}
+                  </div>
+                </fieldset>
+
+                {submitError && (
+                  <div
+                    role="alert"
+                    style={{
+                      backgroundColor: "#FFF3F3",
+                      border: "1px solid #E3B8B8",
+                      color: "#7A2020",
+                      padding: "14px",
+                      borderRadius: "8px",
+                      marginBottom: "20px",
+                    }}
+                  >
+                    {submitError}
+                  </div>
+                )}
+
+                <div
+                  className="action-row"
+                  style={{
+                    display: "flex",
+                    justifyContent: "flex-end",
+                    gap: "12px",
+                    flexWrap: "wrap",
+                  }}
+                >
+                    <div className="home-actions">
+                  <button
+                    type="button"
+                    onClick={onBack}
+                    disabled={submitting}
+                  >
+                    Cancel
+                  </button>
+                  
+
+                  <button
+                    type="submit"
+                    disabled={
+                      submitting ||
+                      referenceLoading ||
+                      referenceError
+                    }
+                  >
+                    {submitting
+                      ? "Creating Ticket..."
+                      : "Create Ticket"}
+                  </button>
+                </div>
+                </div>
+              </>
+            )}
+          </form>
+        )}
+      </section>
+    </main>
+  );
+}
