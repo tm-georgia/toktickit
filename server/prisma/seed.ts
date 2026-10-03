@@ -91,17 +91,17 @@ async function main() {
       isActive: false,
     },
     {
-      name: "Nandar IT",
-      email: "nandar.it@example.com",
-      role: UserRole.IT_STAFF,
-      isActive: true,
-    },
-    {
-      name: "Inactive IT",
-      email: "inactive.it@example.com",
-      role: UserRole.IT_STAFF,
-      isActive: false,
-    },
+  name: "Nandar IT",
+  email: "nandar.it@example.com",
+  role: UserRole.IT_STAFF,
+  isActive: true,
+},
+{
+  name: "Inactive IT",
+  email: "inactive.it@example.com",
+  role: UserRole.IT_STAFF,
+  isActive: false,
+},
     {
       name: "Local Administrator",
       email: "admin@example.com",

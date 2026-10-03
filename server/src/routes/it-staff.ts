@@ -13,6 +13,121 @@ export const itStaffRouter = Router();
 function error(res: Response, status: number, code: string, message: string): Response {
   return res.status(status).json({ error: { code, message } });
 }
+itStaffRouter.get(
+  "/staff",
+  requireAuthentication,
+  requirePasswordChangeCompleted,
+  requireRoles(UserRole.IT_STAFF),
+  async (_req: Request, res: Response) => {
+    try {
+      const staff = await getPrisma().user.findMany({
+        where: {
+          role: UserRole.IT_STAFF,
+          isActive: true,
+        },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          role: true,
+          isActive: true,
+        },
+        orderBy: {
+          name: "asc",
+        },
+      });
+
+      return res.status(200).json(staff);
+    } catch (cause) {
+      console.error("IT Staff list failed:", cause);
+
+      return error(
+        res,
+        500,
+        "IT_STAFF_LIST_UNAVAILABLE",
+        "Unable to load IT Staff members.",
+      );
+    }
+  },
+);
+
+itStaffRouter.get(
+  "/staff",
+  requireAuthentication,
+  requirePasswordChangeCompleted,
+  requireRoles(UserRole.IT_STAFF),
+  async (_req: Request, res: Response) => {
+    try {
+      const staff = await getPrisma().user.findMany({
+        where: {
+          role: UserRole.IT_STAFF,
+          isActive: true,
+        },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          role: true,
+          isActive: true,
+        },
+        orderBy: {
+          name: "asc",
+        },
+      });
+
+      return res.status(200).json(staff);
+    } catch (cause) {
+      console.error("IT Staff users failed:", cause);
+
+      return error(
+        res,
+        500,
+        "IT_STAFF_USERS_UNAVAILABLE",
+        "Unable to load IT Staff users."
+      );
+    }
+  }
+);
+
+itStaffRouter.get(
+  "/users",
+  requireAuthentication,
+  requirePasswordChangeCompleted,
+  requireRoles(UserRole.IT_STAFF),
+  async (_req: Request, res: Response) => {
+    try {
+      const users = await getPrisma().user.findMany({
+        where: {
+          role: UserRole.IT_STAFF,
+          isActive: true,
+        },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          role: true,
+          isActive: true,
+        },
+        orderBy: {
+          name: "asc",
+        },
+      });
+
+      return res.status(200).json({
+        items: users,
+      });
+    } catch (cause) {
+      console.error("IT Staff users failed:", cause);
+
+      return error(
+        res,
+        500,
+        "IT_STAFF_USERS_UNAVAILABLE",
+        "Unable to load IT Staff users.",
+      );
+    }
+  },
+);
 
 itStaffRouter.get(
   "/tickets",
@@ -35,6 +150,26 @@ itStaffRouter.get(
         typeof req.query.assignedTo === "string"
           ? req.query.assignedTo
           : undefined;
+      
+      const sort =
+        typeof req.query.sort === "string"
+          ? req.query.sort
+          : undefined;
+
+      const requestedPage = Number(req.query.page);
+      const requestedPageSize = Number(req.query.pageSize);
+
+      const page =
+        Number.isInteger(requestedPage) && requestedPage > 0
+          ? requestedPage
+          : 1;
+
+      const pageSize =
+        Number.isInteger(requestedPageSize) &&
+        requestedPageSize > 0 &&
+        requestedPageSize <= 50
+          ? requestedPageSize
+          : 10;
 
       const where = {
         ...(search
@@ -55,8 +190,13 @@ itStaffRouter.get(
               ],
             }
           : {}),
-        ...(status && Object.values(CurrentStatus).includes(status as CurrentStatus)
-          ? { currentStatus: status as CurrentStatus }
+        ...(status &&
+        Object.values(CurrentStatus).includes(
+          status as CurrentStatus,
+        )
+          ? {
+              currentStatus: status as CurrentStatus,
+            }
           : {}),
         ...(assignedTo === "unassigned"
           ? { assignedStaffId: null }
@@ -65,45 +205,232 @@ itStaffRouter.get(
             : {}),
       };
 
-      const tickets = await getPrisma().ticket.findMany({
-        where,
-        orderBy: { updatedAt: "desc" },
-        include: {
-          requester: {
-            select: {
-              id: true,
-              name: true,
-              email: true,
-            },
-          },
-          category: true,
-          relatedSystem: true,
-          assignedStaff: {
-            select: {
-              id: true,
-              name: true,
-              email: true,
-              role: true,
-              isActive: true,
-            },
-          },
-          attachments: {
-            where: { removedAt: null },
-          },
-        },
-      });
+      const prisma = getPrisma();
 
-      return res.status(200).json({ items: tickets });
+let orderBy: any = {
+  updatedAt: "desc",
+};
+
+switch (sort) {
+  case "ticketNumber":
+    orderBy = {
+      ticketNumber: "asc",
+    };
+    break;
+
+  case "createdAsc":
+    orderBy = {
+      createdAt: "asc",
+    };
+    break;
+
+  case "createdDesc":
+    orderBy = {
+      createdAt: "desc",
+    };
+    break;
+
+  case "updatedAsc":
+    orderBy = {
+      updatedAt: "asc",
+    };
+    break;
+
+  case "updatedDesc":
+  default:
+    orderBy = {
+      updatedAt: "desc",
+    };
+    break;
+}
+
+const [total, tickets] = await Promise.all([
+  prisma.ticket.count({
+    where,
+  }),
+
+  prisma.ticket.findMany({
+    where,
+    orderBy,
+    skip: (page - 1) * pageSize,
+    take: pageSize,
+    include: {
+      requester: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+        },
+      },
+
+      category: true,
+
+      relatedSystem: true,
+
+      assignedStaff: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          role: true,
+          isActive: true,
+        },
+      },
+
+      attachments: {
+        where: {
+          removedAt: null,
+        },
+      },
+    },
+  }),
+]);
+
+return res.status(200).json({
+  tickets,
+  total,
+  page,
+  pageSize,
+  totalPages: Math.ceil(total / pageSize),
+});
     } catch (cause) {
-      console.error("IT Staff ticket queue failed:", cause);
+      console.error(
+        "IT Staff ticket queue failed:",
+        cause,
+      );
+
       return error(
         res,
         500,
         "IT_STAFF_QUEUE_UNAVAILABLE",
-        "Unable to load the IT Staff ticket queue."
+        "Unable to load the IT Staff ticket queue.",
       );
     }
-  }
+  },
+);
+
+itStaffRouter.patch(
+  "/tickets/:ticketId/resolution-summary",
+  requireAuthentication,
+  requirePasswordChangeCompleted,
+  requireRoles(UserRole.IT_STAFF),
+  requireTrustedOrigin,
+  async (req: Request, res: Response) => {
+    const ticketId = Number(req.params.ticketId);
+
+    const resolutionSummary =
+      typeof req.body.resolutionSummary === "string"
+        ? req.body.resolutionSummary.trim()
+        : "";
+
+    if (
+      !Number.isInteger(ticketId) ||
+      ticketId <= 0
+    ) {
+      return error(
+        res,
+        400,
+        "INVALID_TICKET_ID",
+        "Ticket ID is invalid.",
+      );
+    }
+
+    if (resolutionSummary.length > 5000) {
+      return error(
+        res,
+        400,
+        "INVALID_RESOLUTION_SUMMARY",
+        "Resolution Summary is too long.",
+      );
+    }
+
+    try {
+      const ticket =
+        await getPrisma().ticket.findUnique({
+          where: {
+            id: ticketId,
+          },
+          select: {
+            id: true,
+          },
+        });
+
+      if (!ticket) {
+        return error(
+          res,
+          404,
+          "TICKET_NOT_FOUND",
+          "Ticket was not found.",
+        );
+      }
+
+      const updatedTicket =
+        await getPrisma().ticket.update({
+          where: {
+            id: ticketId,
+          },
+          data: {
+            resolutionSummary:
+              resolutionSummary || null,
+          },
+        });
+
+      return res.status(200).json(updatedTicket);
+    } catch (cause) {
+      console.error(
+        "IT Staff resolution summary update failed:",
+        cause,
+      );
+
+      return error(
+        res,
+        500,
+        "IT_STAFF_RESOLUTION_UNAVAILABLE",
+        "Unable to update the resolution summary.",
+      );
+    }
+  },
+);
+
+itStaffRouter.get(
+  "/staff",
+  requireAuthentication,
+  requirePasswordChangeCompleted,
+  requireRoles(UserRole.IT_STAFF),
+  async (_req: Request, res: Response) => {
+    try {
+      const staff = await getPrisma().user.findMany({
+        where: {
+          role: UserRole.IT_STAFF,
+          isActive: true,
+        },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          role: true,
+          isActive: true,
+        },
+        orderBy: {
+          name: "asc",
+        },
+      });
+
+      return res.status(200).json(staff);
+    } catch (cause) {
+      console.error(
+        "IT Staff list failed:",
+        cause,
+      );
+
+      return error(
+        res,
+        500,
+        "IT_STAFF_LIST_UNAVAILABLE",
+        "Unable to load IT Staff members.",
+      );
+    }
+  },
 );
 
 itStaffRouter.get(
@@ -191,6 +518,54 @@ itStaffRouter.get(
       );
     }
   }
+);
+
+itStaffRouter.get(
+  "/tickets/:ticketId/attachments/:attachmentId",
+  async (req, res) => {
+    const ticketId = Number(req.params.ticketId);
+    const attachmentId = Number(req.params.attachmentId);
+
+    if (
+      !Number.isInteger(ticketId) ||
+      ticketId <= 0 ||
+      !Number.isInteger(attachmentId) ||
+      attachmentId <= 0
+    ) {
+      return res.status(400).json({
+        error: "Invalid ticket or attachment ID",
+      });
+    }
+
+    try {
+      const prisma = getPrisma();
+
+      const attachment = await prisma.attachment.findFirst({
+        where: {
+          id: attachmentId,
+          ticketId,
+          removedAt: null,
+        },
+      });
+
+      if (!attachment) {
+        return res.status(404).json({
+          error: "Attachment not found",
+        });
+      }
+
+      return res.download(
+        attachment.storagePath,
+        attachment.originalFileName,
+      );
+    } catch (error) {
+      console.error("Failed to download IT Staff attachment:", error);
+
+      return res.status(500).json({
+        error: "Failed to download attachment",
+      });
+    }
+  },
 );
 
 itStaffRouter.post(
@@ -354,7 +729,10 @@ itStaffRouter.patch(
   "/tickets/:ticketId/priority",
   requireAuthentication,
   requirePasswordChangeCompleted,
-  requireRoles(UserRole.IT_STAFF),
+  requireRoles(
+  UserRole.IT_STAFF,
+  UserRole.ADMINISTRATOR,
+),
   requireTrustedOrigin,
   async (req: Request, res: Response) => {
     const ticketId = Number(req.params.ticketId);

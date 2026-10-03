@@ -4,6 +4,8 @@ import MyTickets from "./MyTickets.js";
 import CreateTicket from "./CreateTicket.js";
 import TicketDetail from "./TicketDetail.js";
 import ITStaffTicketDetail from "./ITStaffTicketDetail.js";
+import ITStaffTicketQueue from "./ITStaffTicketQueue.js";
+
 import {
   getCategories,
   getRelatedSystems,
@@ -25,17 +27,19 @@ type Page =
   | "my-tickets"
   | "create-ticket"
   | "ticket-detail"
-  | "it-staff-ticket-detail";
+  | "it-staff-ticket-detail"
+  | "it-staff-queue";
 
 function LoginScreen({
   onLogin,
 }: {
   onLogin: (user: User) => void;
 }) {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
+const [email, setEmail] = useState("");
+const [password, setPassword] = useState("");
+const [error, setError] = useState("");
+const [loading, setLoading] = useState(false);
+const [showPassword, setShowPassword] = useState(false);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -81,16 +85,25 @@ function LoginScreen({
           </label>
 
           <label>
-            Password
-            <input
-              type="password"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              placeholder="Enter your password"
-              autoComplete="current-password"
-              required
-            />
-          </label>
+  Password
+  <div className="password-input-wrapper">
+    <input
+      type={showPassword ? "text" : "password"}
+      value={password}
+      onChange={(event) => setPassword(event.target.value)}
+      placeholder="Enter your password"
+      autoComplete="current-password"
+      required
+    />
+
+    <PasswordToggle
+      visible={showPassword}
+      onToggle={() =>
+        setShowPassword((current) => !current)
+      }
+    />
+  </div>
+</label>
 
           {error && <div className="error-message">{error}</div>}
 
@@ -102,6 +115,25 @@ function LoginScreen({
     </main>
   );
 }
+
+  function PasswordToggle({
+    visible,
+    onToggle,
+  }: {
+    visible: boolean;
+    onToggle: () => void;
+  }) {
+    return (
+      <button
+        type="button"
+        className="password-toggle"
+        onClick={onToggle}
+        aria-label={visible ? "Hide password" : "Show password"}
+      >
+        {visible ? "◉" : "◌"}
+      </button>
+    );
+  }
 
 function ChangePasswordScreen({
   user,
@@ -179,25 +211,6 @@ function ChangePasswordScreen({
     } finally {
       setLoading(false);
     }
-  }
-
-  function PasswordToggle({
-    visible,
-    onToggle,
-  }: {
-    visible: boolean;
-    onToggle: () => void;
-  }) {
-    return (
-      <button
-        type="button"
-        className="password-toggle"
-        onClick={onToggle}
-        aria-label={visible ? "Hide password" : "Show password"}
-      >
-        {visible ? "◉" : "◌"}
-      </button>
-    );
   }
 
   function PasswordRule({
@@ -379,12 +392,10 @@ function RoleHome({
   user,
   onLogout,
   onNavigate,
-  onOpenITStaffTicket,
 }: {
   user: User;
   onLogout: () => void;
   onNavigate: (page: Page) => void;
-  onOpenITStaffTicket: (ticketId: number) => void;
 }) {
   return (
     <div className="app-shell">
@@ -457,15 +468,14 @@ function RoleHome({
     </p>
 
     <div className="home-actions">
-      <button
-        type="button"
-        onClick={() =>
-          onOpenITStaffTicket(2)
-        }
-      >
-        Open Ticket TCK-20260921-0002
-      </button>
-    </div>
+  <button
+    type="button"
+    className="primary-button"
+    onClick={() => onNavigate("it-staff-queue")}
+  >
+    View My Queue
+  </button>
+</div>
   </>
 )}
 
@@ -642,21 +652,31 @@ if (
   );
 }
 
+if (page === "it-staff-queue" && user.role === "IT_STAFF") {
+  return (
+    <ITStaffTicketQueue
+      key={selectedTicketId ?? "queue"}
+      user={user}
+      onOpenTicket={(ticketId) => {
+        setSelectedTicketId(ticketId);
+        setPage("it-staff-ticket-detail");
+      }}
+      onBack={() => setPage("home")}
+    />
+  );
+}
+
 if (
   page === "it-staff-ticket-detail" &&
   user.role === "IT_STAFF" &&
   selectedTicketId !== null
 ) {
   return (
-    
     <ITStaffTicketDetail
-    
       user={user}
       ticketId={selectedTicketId}
-      onBack={() => setPage("home")}
+      onBack={() => setPage("it-staff-queue")}
     />
-    
-    
   );
 }
 
@@ -665,10 +685,6 @@ return (
     user={user}
     onLogout={handleLogout}
     onNavigate={setPage}
-    onOpenITStaffTicket={(ticketId) => {
-      setSelectedTicketId(ticketId);
-      setPage("it-staff-ticket-detail");
-    }}
   />
 );
 }

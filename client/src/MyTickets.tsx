@@ -72,7 +72,7 @@ export default function MyTickets({
         pageSize,
       });
 
-      setTickets(response.items);
+      setTickets(response.tickets);
 setTotal(response.total);
 setTotalPages(response.totalPages);
 
@@ -559,53 +559,59 @@ function statusBadgeStyle(value: DisplayStatus) {
               </table>
             </div>
 
-            <div className="mobile-ticket-list">
-              {tickets.map((ticket) => (
-                <article
-                  key={ticket.id}
-                  className="mobile-ticket-card"
-                >
-                  <div className="mobile-ticket-header">
-                    <strong>{ticket.ticketNumber}</strong>
+           <div className="mobile-ticket-list">
+  {tickets.map((ticket) => (
+    <article
+      key={ticket.id}
+      className="mobile-ticket-card"
+    >
+      <div className="mobile-ticket-header">
+        <strong>{ticket.ticketNumber}</strong>
 
-                    <span
-                      className="ticket-badge status-badge"
-                      style={{
-                        ...statusBadgeStyle(displayStatus(ticket.id)),
-                        display: "inline-block",
-                        padding: "4px 10px",
-                        borderRadius: "999px",
-                        fontSize: "12px",
-                        fontWeight: 600,
-                      }}
-                    >
-                      {statusLabel(displayStatus(ticket.id))}
-                    </span>
-                  </div>
+        <span
+          className="ticket-badge status-badge"
+          style={{
+            ...statusBadgeStyle(displayStatus(ticket.id)),
+            display: "inline-block",
+            padding: "4px 10px",
+            borderRadius: "999px",
+            fontSize: "12px",
+            fontWeight: 600,
+          }}
+        >
+          {statusLabel(displayStatus(ticket.id))}
+        </span>
+      </div>
 
-                  <h2>{ticket.summary}</h2>
+      <h2>{ticket.summary}</h2>
 
-                  <p>
-                    <strong>Category:</strong>{" "}
-                    {ticket.category.name}
-                  </p>
+      <p>
+        <strong>Category:</strong>{" "}
+        {ticket.category.name}
+      </p>
 
-                  <p>
-                    <strong>Priority:</strong>{" "}
-                    <span className="ticket-badge priority-badge">
-                      {ticket.requestedPriority}
-                    </span>
-                  </p>
+      <p>
+        <strong>Priority:</strong>{" "}
+        <span className="ticket-badge priority-badge">
+          {ticket.requestedPriority}
+        </span>
+      </p>
 
-                  <p>
-                    <strong>Last Updated:</strong>{" "}
-                    {formatDate(ticket.updatedAt)}
-                  </p>
+      <p>
+        <strong>Last Updated:</strong>{" "}
+        {formatDate(ticket.updatedAt)}
+      </p>
 
-                  
-                </article>
-              ))}
-            </div>
+      <button
+        type="button"
+        className="mobile-view-button primary-button"
+        onClick={() => onViewTicket(ticket.id)}
+      >
+        View Ticket
+      </button>
+    </article>
+  ))}
+</div> 
 
             <div className="pagination">
               <div className="page-size">
