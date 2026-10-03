@@ -77,6 +77,7 @@ model Ticket {
   ticketNumber      String            @unique
   ticketDate        DateTime          @default(now())
   requesterId       Int
+  resolutionSummary String?
   assignedStaffId   Int?
   itPriority        ItPriority?
   categoryId        Int

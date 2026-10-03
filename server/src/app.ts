@@ -289,12 +289,12 @@ app.get("/api/tickets", async (req: Request, res: Response) => {
       }),
     ]);
     res.status(200).json({
-      items,
-      page,
-      pageSize,
-      total,
-      totalPages: Math.ceil(total / pageSize),
-    });
+  tickets: items,
+  page,
+  pageSize,
+  total,
+  totalPages: Math.ceil(total / pageSize),
+});
   } catch (error) {
     console.error("Failed to fetch tickets:", error);
     res.status(500).json({
@@ -517,19 +517,21 @@ const sequenceNumber =
             sequenceNumber
           ).padStart(4, "0")}`;
         return tx.ticket.create({
-          data: {
-            ticketNumber,
-            ticketDate,
-            requesterId,
-            categoryId,
-            relatedSystemId,
-            summary: trimmedSummary,
-            description: trimmedDescription,
-            requestedPriority:
-              requestedPriority as RequestedPriority,
-            currentStatus:
-              CurrentStatus.NEW,
-          },
+  data: {
+    ticketNumber,
+    ticketDate,
+    requesterId,
+    categoryId,
+    relatedSystemId,
+    summary: trimmedSummary,
+    description: trimmedDescription,
+    requestedPriority:
+      requestedPriority as RequestedPriority,
+    itPriority:
+      requestedPriority as RequestedPriority,
+    currentStatus:
+      CurrentStatus.NEW,
+  },
           include: {
             requester: {
               select: {
