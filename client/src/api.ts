@@ -843,3 +843,202 @@ export async function downloadITStaffAttachment(
 
   return response.blob();
 }
+
+export type AdminUserRole =
+  | "REQUESTER"
+  | "IT_STAFF"
+  | "ADMINISTRATOR";
+
+export interface AdminUser {
+  id: number;
+  name: string;
+  email: string;
+  role: AdminUserRole;
+  isActive: boolean;
+  mustChangePassword: boolean;
+}
+
+export interface AdminUserListResponse {
+  users: AdminUser[];
+}
+
+async function getAdminErrorMessage(
+  response: Response,
+  fallback: string,
+): Promise<string> {
+  try {
+    const body = await response.json();
+
+    if (
+      body?.error &&
+      typeof body.error.message === "string"
+    ) {
+      return body.error.message;
+    }
+
+    if (typeof body?.error === "string") {
+      return body.error;
+    }
+  } catch {
+    // Keep the safe fallback message.
+  }
+
+  return fallback;
+}
+
+export async function getAdminUsers(): Promise<AdminUser[]> {
+  const response = await fetch(
+    `${API_URL}/api/admin/users`,
+    {
+      credentials: "include",
+    },
+  );
+
+  if (!response.ok) {
+    throw new Error(
+      await getAdminErrorMessage(
+        response,
+        "Unable to load users.",
+      ),
+    );
+  }
+
+  const data: AdminUserListResponse =
+    await response.json();
+
+  return data.users;
+}
+
+export async function createAdminUser(input: {
+  name: string;
+  email: string;
+  role: AdminUserRole;
+  initialPassword: string;
+}): Promise<AdminUser> {
+  const response = await fetch(
+    `${API_URL}/api/admin/users`,
+    {
+      method: "POST",
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(input),
+    },
+  );
+
+  if (!response.ok) {
+    throw new Error(
+      await getAdminErrorMessage(
+        response,
+        "Unable to create user.",
+      ),
+    );
+  }
+
+  const data: { user: AdminUser } =
+    await response.json();
+
+  return data.user;
+}
+
+export async function updateAdminUser(
+  userId: number,
+  input: {
+    name?: string;
+    email?: string;
+    role?: AdminUserRole;
+  },
+): Promise<AdminUser> {
+  const response = await fetch(
+    `${API_URL}/api/admin/users/${userId}`,
+    {
+      method: "PATCH",
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(input),
+    },
+  );
+
+  if (!response.ok) {
+    throw new Error(
+      await getAdminErrorMessage(
+        response,
+        "Unable to update user.",
+      ),
+    );
+  }
+
+  const data: { user: AdminUser } =
+    await response.json();
+
+  return data.user;
+}
+
+export async function updateAdminUserStatus(
+  userId: number,
+  isActive: boolean,
+): Promise<AdminUser> {
+  const response = await fetch(
+    `${API_URL}/api/admin/users/${userId}/status`,
+    {
+      method: "PATCH",
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        isActive,
+      }),
+    },
+  );
+
+  if (!response.ok) {
+    throw new Error(
+      await getAdminErrorMessage(
+        response,
+        "Unable to update user status.",
+      ),
+    );
+  }
+
+  const data: { user: AdminUser } =
+    await response.json();
+
+  return data.user;
+}
+
+export async function resetAdminUserPassword(
+  userId: number,
+  initialPassword: string,
+): Promise<AdminUser> {
+  const response = await fetch(
+    `${API_URL}/api/admin/users/${userId}/password`,
+    {
+      method: "PATCH",
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        initialPassword,
+      }),
+    },
+  );
+
+  if (!response.ok) {
+    throw new Error(
+      await getAdminErrorMessage(
+        response,
+        "Unable to set the new initial password.",
+      ),
+    );
+  }
+
+  const data: { user: AdminUser } =
+    await response.json();
+
+  return data.user;
+}

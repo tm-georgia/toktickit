@@ -4,6 +4,20 @@ import app from "../../src/app.js";
 import { getPrisma } from "../../src/prisma.js";
 import { hashPassword } from "../../src/auth/password.js";
 
+function testTicketNumber(suffix: string = "") {
+  const date = new Date();
+
+  const year = date.getUTCFullYear();
+  const month = String(date.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(date.getUTCDate()).padStart(2, "0");
+
+  const sequence = String(
+    (Date.now() + Math.floor(Math.random() * 1000)) % 10000,
+  ).padStart(4, "0");
+
+  return `TCK-${year}${month}${day}-${sequence}${suffix}`;
+}
+
 const prisma = getPrisma();
 
 let requesterId: number;
@@ -145,7 +159,7 @@ beforeAll(async () => {
 
   const ticket = await prisma.ticket.create({
     data: {
-      ticketNumber: `TCK-99999999-${Date.now()}`,
+      ticketNumber: testTicketNumber(),
       ticketDate: new Date(),
       requesterId,
       categoryId,
@@ -168,7 +182,7 @@ describe("GET /api/tickets", () => {
   it("returns only the authenticated requester's tickets", async () => {
     const otherTicket = await prisma.ticket.create({
       data: {
-        ticketNumber: `TCK-99999999-${Date.now()}`,
+        ticketNumber: testTicketNumber(),
         ticketDate: new Date(),
         requesterId: otherRequesterId,
         categoryId,
@@ -313,7 +327,7 @@ describe("GET /api/tickets/:ticketId", () => {
   it("does not allow viewing another requester's ticket", async () => {
     const otherTicket = await prisma.ticket.create({
       data: {
-        ticketNumber: `TCK-99999999-${Date.now()}`,
+        ticketNumber: testTicketNumber(),
         ticketDate: new Date(),
         requesterId: otherRequesterId,
         categoryId,
@@ -389,7 +403,7 @@ it("rejects an attachment larger than 5 MB", async () => {
 it("rejects a sixth active attachment", async () => {
   const attachmentTicket = await prisma.ticket.create({
     data: {
-      ticketNumber: `TCK-99999999-${Date.now()}5`,
+      ticketNumber: testTicketNumber(),
       ticketDate: new Date(),
       requesterId,
       categoryId,
@@ -439,7 +453,7 @@ it("rejects a sixth active attachment", async () => {
   it("does not allow downloading another requester's attachment", async () => {
     const otherTicket = await prisma.ticket.create({
       data: {
-        ticketNumber: `TCK-99999999-${Date.now()}`,
+        ticketNumber: testTicketNumber(),
         ticketDate: new Date(),
         requesterId: otherRequesterId,
         categoryId,

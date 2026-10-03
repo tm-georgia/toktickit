@@ -191,6 +191,29 @@ adminRouter.patch(
         return error(res, 404, "USER_NOT_FOUND", "User was not found.");
       }
 
+      if (
+  role !== undefined &&
+  role !== UserRole.ADMINISTRATOR &&
+  existingUser.role === UserRole.ADMINISTRATOR &&
+  existingUser.isActive
+) {
+  const activeAdministratorCount = await getPrisma().user.count({
+    where: {
+      role: UserRole.ADMINISTRATOR,
+      isActive: true,
+    },
+  });
+
+  if (activeAdministratorCount <= 1) {
+    return error(
+      res,
+      400,
+      "CANNOT_REMOVE_LAST_ADMINISTRATOR",
+      "The system must have at least one active Administrator."
+    );
+  }
+}
+
       if (email !== undefined) {
         const emailOwner = await getPrisma().user.findFirst({
           where: {
@@ -276,6 +299,24 @@ adminRouter.patch(
           "You cannot deactivate your own account."
         );
       }
+
+      if (!isActive && user.role === UserRole.ADMINISTRATOR) {
+  const activeAdministratorCount = await getPrisma().user.count({
+    where: {
+      role: UserRole.ADMINISTRATOR,
+      isActive: true,
+    },
+  });
+
+  if (activeAdministratorCount <= 1) {
+    return error(
+      res,
+      400,
+      "CANNOT_REMOVE_LAST_ADMINISTRATOR",
+      "The system must have at least one active Administrator."
+    );
+  }
+}
 
       const updatedUser = await getPrisma().user.update({
         where: { id: userId },
