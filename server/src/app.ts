@@ -5,6 +5,8 @@ import { CurrentStatus, RequestedPriority, UserRole } from "@prisma/client";
 import { getPrisma } from "./prisma.js";
 import { loadAuthentication, requireAuthentication, requirePasswordChangeCompleted } from "./auth/middleware.js";
 import { authRouter } from "./routes/auth.js";
+import { itStaffRouter } from "./routes/it-staff.js";
+import { adminRouter } from "./routes/admin.js";
 // The Express app is exported separately from app.listen() (see index.ts)
 // so Supertest can import `app` without opening a port.
 export const app = express();
@@ -15,6 +17,8 @@ app.use(cors({
 app.use(express.json());
 app.use(loadAuthentication);
 app.use("/auth", authRouter);
+app.use("/api/it-staff", itStaffRouter);
+app.use("/api/admin", adminRouter);
 const upload = multer({
   dest: "uploads/",
 });
@@ -285,12 +289,12 @@ app.get("/api/tickets", async (req: Request, res: Response) => {
       }),
     ]);
     res.status(200).json({
-      items,
-      page,
-      pageSize,
-      total,
-      totalPages: Math.ceil(total / pageSize),
-    });
+  tickets: items,
+  page,
+  pageSize,
+  total,
+  totalPages: Math.ceil(total / pageSize),
+});
   } catch (error) {
     console.error("Failed to fetch tickets:", error);
     res.status(500).json({
@@ -477,17 +481,32 @@ app.post("/api/tickets", async (req: Request, res: Response) => {
             hashtext(${prefix})
           )
         `;
-        // Count today's tickets.
-        const ticketCount =
-          await tx.ticket.count({
-            where: {
-              ticketNumber: {
-                startsWith: prefix,
-              },
-            },
-          });
-        const sequenceNumber =
-          ticketCount + 1;
+        // Find the highest existing sequence number for today.
+const todaysTickets = await tx.ticket.findMany({
+  where: {
+    ticketNumber: {
+      startsWith: prefix,
+    },
+  },
+  select: {
+    ticketNumber: true,
+  },
+});
+
+const highestSequenceNumber = todaysTickets.reduce(
+  (highest, current) => {
+    const sequence = Number(
+      current.ticketNumber.slice(prefix.length)
+    );
+    return Number.isFinite(sequence)
+      ? Math.max(highest, sequence)
+      : highest;
+  },
+  0
+);
+
+const sequenceNumber =
+  highestSequenceNumber + 1;
         if (sequenceNumber > 9999) {
           throw new Error(
             "Daily ticket number limit reached"
@@ -498,19 +517,21 @@ app.post("/api/tickets", async (req: Request, res: Response) => {
             sequenceNumber
           ).padStart(4, "0")}`;
         return tx.ticket.create({
-          data: {
-            ticketNumber,
-            ticketDate,
-            requesterId,
-            categoryId,
-            relatedSystemId,
-            summary: trimmedSummary,
-            description: trimmedDescription,
-            requestedPriority:
-              requestedPriority as RequestedPriority,
-            currentStatus:
-              CurrentStatus.NEW,
-          },
+  data: {
+    ticketNumber,
+    ticketDate,
+    requesterId,
+    categoryId,
+    relatedSystemId,
+    summary: trimmedSummary,
+    description: trimmedDescription,
+    requestedPriority:
+      requestedPriority as RequestedPriority,
+    itPriority:
+      requestedPriority as RequestedPriority,
+    currentStatus:
+      CurrentStatus.NEW,
+  },
           include: {
             requester: {
               select: {
