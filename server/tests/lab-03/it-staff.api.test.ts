@@ -5,6 +5,20 @@ import app from "../../src/app.js";
 import { hashPassword } from "../../src/auth/password.js";
 import { getPrisma } from "../../src/prisma.js";
 
+function testTicketNumber() {
+  const date = new Date();
+
+  const year = date.getUTCFullYear();
+  const month = String(date.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(date.getUTCDate()).padStart(2, "0");
+
+  const sequence = String(
+    (Date.now() + Math.floor(Math.random() * 1000)) % 10000,
+  ).padStart(4, "0");
+
+  return `TCK-${year}${month}${day}-${sequence}`;
+}
+
 const prisma = getPrisma();
 
 const password = "ITStaffTest123";
@@ -96,7 +110,7 @@ beforeAll(async () => {
 
   const ticket = await prisma.ticket.create({
     data: {
-      ticketNumber: `IT-TEST-${Date.now()}`,
+      ticketNumber: testTicketNumber(),
       requesterId,
       categoryId: category.id,
       relatedSystemId: relatedSystem.id,

@@ -5,6 +5,7 @@ import CreateTicket from "./CreateTicket.js";
 import TicketDetail from "./TicketDetail.js";
 import ITStaffTicketDetail from "./ITStaffTicketDetail.js";
 import ITStaffTicketQueue from "./ITStaffTicketQueue.js";
+import AdminUserManagement from "./AdminUserManagement.js";
 
 import {
   getCategories,
@@ -28,7 +29,8 @@ type Page =
   | "create-ticket"
   | "ticket-detail"
   | "it-staff-ticket-detail"
-  | "it-staff-queue";
+  | "it-staff-queue"
+  | "admin-user-management";
 
 function LoginScreen({
   onLogin,
@@ -480,14 +482,25 @@ function RoleHome({
 )}
 
             {user.role === "ADMINISTRATOR" && (
-              <>
-                <h2>Administrator</h2>
+  <>
+    <h2>Administrator</h2>
 
-                <p>
-                  Manage TokTickIT users and access.
-                </p>
-              </>
-            )}
+    <p>
+      Manage TokTickIT users and access.
+    </p>
+
+    <div className="home-actions">
+      <button
+        type="button"
+        onClick={() =>
+          onNavigate("admin-user-management")
+        }
+      >
+        User Management
+      </button>
+    </div>
+  </>
+)}
           </div>
         </section>
       </main>
@@ -661,6 +674,18 @@ if (page === "it-staff-queue" && user.role === "IT_STAFF") {
         setSelectedTicketId(ticketId);
         setPage("it-staff-ticket-detail");
       }}
+      onBack={() => setPage("home")}
+    />
+  );
+}
+
+if (
+  page === "admin-user-management" &&
+  user.role === "ADMINISTRATOR"
+) {
+  return (
+    <AdminUserManagement
+      user={user}
       onBack={() => setPage("home")}
     />
   );
