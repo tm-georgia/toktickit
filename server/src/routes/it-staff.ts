@@ -287,6 +287,7 @@ const [total, tickets] = await Promise.all([
 ]);
 
 return res.status(200).json({
+  items: tickets,
   tickets,
   total,
   page,
