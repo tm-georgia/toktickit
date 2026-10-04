@@ -8,7 +8,7 @@ import { getPrisma } from "../../src/prisma.js";
 const prisma = getPrisma();
 
 const password = "AdminTest123";
-const newPassword = "NewAdminTest123";
+const newPassword = "NewAdminTest123!";
 
 const adminEmail = `admin-test-${Date.now()}@example.test`;
 const requesterEmail = `admin-requester-${Date.now()}@example.test`;
@@ -125,7 +125,7 @@ describe("Administrator user management", () => {
         name: "Created Admin Test User",
         email: `created-${Date.now()}@example.test`,
         role: UserRole.IT_STAFF,
-        initialPassword: "CreatedUser123",
+        initialPassword: "CreatedUser123!",
       })
       .expect(201);
 
@@ -148,7 +148,7 @@ describe("Administrator user management", () => {
         name: "Duplicate Email User",
         email: adminEmail,
         role: UserRole.REQUESTER,
-        initialPassword: "Duplicate123",
+        initialPassword: "Duplicate123!",
       })
       .expect(409);
   });

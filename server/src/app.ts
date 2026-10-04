@@ -289,6 +289,7 @@ app.get("/api/tickets", async (req: Request, res: Response) => {
       }),
     ]);
     res.status(200).json({
+      items,
   tickets: items,
   page,
   pageSize,

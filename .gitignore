@@ -14,3 +14,4 @@ server/prisma/*.db
 .DS_Store
 
 server/uploads/
+test-results/

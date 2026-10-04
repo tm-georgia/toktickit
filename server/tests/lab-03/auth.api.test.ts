@@ -89,8 +89,8 @@ describe("Lab 3 authentication API", () => {
     await agent.get("/api/categories").expect(403);
     await agent.post("/auth/change-password").send({
       currentPassword: password,
-      newPassword: "ReplacementPassword123",
-      confirmPassword: "ReplacementPassword123",
+      newPassword: "ReplacementPassword123!",
+      confirmPassword: "ReplacementPassword123!",
     }).expect(200);
 
     await agent.post("/auth/logout").expect(204);
