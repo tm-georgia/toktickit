@@ -46,21 +46,22 @@ model Category {
 }
 
 model User {
-  id                 Int       @id @default(autoincrement())
+  id                 Int      @id @default(autoincrement())
   name               String
-  email              String    @unique
+  email              String   @unique
   passwordHash       String
-  role               UserRole  @default(REQUESTER)
-  isActive           Boolean   @default(true)
-  mustChangePassword Boolean   @default(true)
-  createdAt          DateTime  @default(now())
-  updatedAt          DateTime  @updatedAt
+  role               UserRole @default(REQUESTER)
+  isActive           Boolean  @default(true)
+  mustChangePassword Boolean  @default(true)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
 
-  tickets          Ticket[]
-assignedTickets  Ticket[]        @relation("AssignedTickets")
-publicComments   PublicComment[] @relation("PublicCommentAuthors")
-internalNotes    InternalNote[]  @relation("InternalNoteAuthors")
-sessions         Session[]
+  tickets         Ticket[]
+  assignedTickets Ticket[]        @relation("AssignedTickets")
+  publicComments  PublicComment[] @relation("PublicCommentAuthors")
+  internalNotes   InternalNote[]  @relation("InternalNoteAuthors")
+  sessions        Session[]
+  actionsTaken    ActionTaken[]   @relation("ActionTakenPerformers")
 }
 
 model RelatedSystem {
@@ -89,13 +90,14 @@ model Ticket {
   createdAt         DateTime          @default(now())
   updatedAt         DateTime          @updatedAt
 
-  requester     User                 @relation(fields: [requesterId], references: [id])
-  assignedStaff User?                @relation("AssignedTickets", fields: [assignedStaffId], references: [id])
-  category      Category             @relation(fields: [categoryId], references: [id])
-  relatedSystem RelatedSystem        @relation(fields: [relatedSystemId], references: [id])
-  attachments   Attachment[]
+  requester      User            @relation(fields: [requesterId], references: [id])
+  assignedStaff  User?           @relation("AssignedTickets", fields: [assignedStaffId], references: [id])
+  category       Category        @relation(fields: [categoryId], references: [id])
+  relatedSystem  RelatedSystem   @relation(fields: [relatedSystemId], references: [id])
+  attachments    Attachment[]
   publicComments PublicComment[]
   internalNotes  InternalNote[]
+  actionsTaken   ActionTaken[]
 
   @@index([requesterId])
   @@index([updatedAt])
@@ -105,12 +107,12 @@ model Ticket {
 }
 
 model Session {
-  id        Int      @id @default(autoincrement())
-  tokenHash String   @unique
+  id        Int       @id @default(autoincrement())
+  tokenHash String    @unique
   userId    Int
   expiresAt DateTime
   revokedAt DateTime?
-  createdAt DateTime @default(now())
+  createdAt DateTime  @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -163,4 +165,24 @@ model InternalNote {
 
   @@index([ticketId])
   @@index([authorId])
+}
+
+model ActionTaken {
+  id                Int      @id @default(autoincrement())
+  ticketId          Int
+  actionDateTime    DateTime
+  actionDescription String
+  result            String
+  performedByUserId Int
+  followUpRequired  Boolean  @default(false)
+  followUpNote      String?
+  attachmentNotes   String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  ticket      Ticket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  performedBy User   @relation("ActionTakenPerformers", fields: [performedByUserId], references: [id])
+
+  @@index([ticketId, actionDateTime])
+  @@index([performedByUserId])
 }
