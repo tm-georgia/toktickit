@@ -3,10 +3,17 @@ import cors from "cors";
 import multer from "multer";
 import { CurrentStatus, RequestedPriority, UserRole } from "@prisma/client";
 import { getPrisma } from "./prisma.js";
-import { loadAuthentication, requireAuthentication, requirePasswordChangeCompleted } from "./auth/middleware.js";
+import {
+  loadAuthentication,
+  requireAuthentication,
+  requirePasswordChangeCompleted,
+  requireRoles,
+  requireTrustedOrigin,
+} from "./auth/middleware.js";
 import { authRouter } from "./routes/auth.js";
 import { itStaffRouter } from "./routes/it-staff.js";
 import { adminRouter } from "./routes/admin.js";
+import { actionsTakenRouter } from "./routes/actions-taken.js";
 // The Express app is exported separately from app.listen() (see index.ts)
 // so Supertest can import `app` without opening a port.
 export const app = express();
@@ -35,6 +42,7 @@ app.get("/api/health", (_req: Request, res: Response) => {
 // APIs are normal application functionality and require an authenticated user
 // who has completed any required initial-password change.
 app.use("/api", requireAuthentication, requirePasswordChangeCompleted);
+app.use("/api/tickets", actionsTakenRouter);
 // ---------------------------------------------------------------------------
 // Issue 4 — Category list
 // ---------------------------------------------------------------------------
