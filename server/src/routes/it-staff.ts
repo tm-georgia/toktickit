@@ -13,6 +13,45 @@ export const itStaffRouter = Router();
 function error(res: Response, status: number, code: string, message: string): Response {
   return res.status(status).json({ error: { code, message } });
 }
+const allowedStatusTransitions: Record<
+  CurrentStatus,
+  readonly CurrentStatus[]
+> = {
+  [CurrentStatus.NEW]: [
+    CurrentStatus.OPEN,
+    CurrentStatus.CANCELLED,
+  ],
+  [CurrentStatus.OPEN]: [
+    CurrentStatus.IN_PROGRESS,
+    CurrentStatus.WAITING_FOR_REQUESTER,
+    CurrentStatus.CANCELLED,
+  ],
+  [CurrentStatus.IN_PROGRESS]: [
+    CurrentStatus.WAITING_FOR_REQUESTER,
+    CurrentStatus.RESOLVED,
+    CurrentStatus.CANCELLED,
+  ],
+  [CurrentStatus.WAITING_FOR_REQUESTER]: [
+    CurrentStatus.IN_PROGRESS,
+    CurrentStatus.RESOLVED,
+    CurrentStatus.CANCELLED,
+  ],
+  [CurrentStatus.RESOLVED]: [
+    CurrentStatus.CLOSED,
+    CurrentStatus.REOPENED,
+  ],
+  [CurrentStatus.CLOSED]: [
+    CurrentStatus.REOPENED,
+  ],
+  [CurrentStatus.REOPENED]: [
+    CurrentStatus.IN_PROGRESS,
+    CurrentStatus.CANCELLED,
+  ],
+  [CurrentStatus.CANCELLED]: [
+    CurrentStatus.REOPENED,
+  ],
+};
+
 itStaffRouter.get(
   "/staff",
   requireAuthentication,
@@ -928,13 +967,13 @@ itStaffRouter.patch(
   requireTrustedOrigin,
   async (req: Request, res: Response) => {
     const ticketId = Number(req.params.ticketId);
-    const currentStatus = req.body.currentStatus;
+    const nextStatus = req.body.currentStatus;
 
     if (!Number.isInteger(ticketId) || ticketId <= 0) {
       return error(res, 400, "INVALID_TICKET_ID", "Ticket ID is invalid.");
     }
 
-    if (!Object.values(CurrentStatus).includes(currentStatus)) {
+    if (!Object.values(CurrentStatus).includes(nextStatus)) {
       return error(
         res,
         400,
@@ -944,10 +983,14 @@ itStaffRouter.patch(
     }
 
     try {
-      const ticket = await getPrisma().ticket.findUnique({
+      const prisma = getPrisma();
+
+      const ticket = await prisma.ticket.findUnique({
         where: { id: ticketId },
         select: {
           id: true,
+          currentStatus: true,
+          updatedAt: true,
         },
       });
 
@@ -955,18 +998,55 @@ itStaffRouter.patch(
         return error(res, 404, "TICKET_NOT_FOUND", "Ticket was not found.");
       }
 
-      const updatedTicket = await getPrisma().ticket.update({
-        where: { id: ticketId },
-        data: {
-          currentStatus,
+      if (
+        !allowedStatusTransitions[ticket.currentStatus].includes(nextStatus)
+      ) {
+        return error(
+          res,
+          400,
+          "INVALID_STATUS_TRANSITION",
+          `Cannot change ticket status from ${ticket.currentStatus} to ${nextStatus}.`
+        );
+      }
+
+      const result = await prisma.ticket.updateMany({
+        where: {
+          id: ticketId,
+          currentStatus: ticket.currentStatus,
+          updatedAt: ticket.updatedAt,
         },
-        select: {
-          id: true,
-          currentStatus: true,
+        data: {
+          currentStatus: nextStatus,
         },
       });
 
-      return res.status(200).json(updatedTicket);
+      if (result.count === 0) {
+        const existingTicket = await prisma.ticket.findUnique({
+          where: { id: ticketId },
+          select: { id: true },
+        });
+
+        if (!existingTicket) {
+          return error(
+            res,
+            404,
+            "TICKET_NOT_FOUND",
+            "Ticket was not found."
+          );
+        }
+
+        return error(
+          res,
+          409,
+          "TICKET_STATUS_CONFLICT",
+          "The ticket changed while you were updating it. Reload the ticket and try again."
+        );
+      }
+
+      return res.status(200).json({
+        id: ticketId,
+        currentStatus: nextStatus,
+      });
     } catch (cause) {
       console.error("IT Staff status update failed:", cause);
       return error(

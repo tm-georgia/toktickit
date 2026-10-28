@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import request from "supertest";
-import { UserRole } from "@prisma/client";
+import { CurrentStatus, UserRole } from "@prisma/client";
 import app from "../../src/app.js";
 import { hashPassword } from "../../src/auth/password.js";
 import { getPrisma } from "../../src/prisma.js";
@@ -61,15 +61,15 @@ beforeAll(async () => {
   });
 
   const secondStaff = await prisma.user.create({
-  data: {
-    name: "IT Staff Second Test User",
-    email: secondStaffEmail,
-    passwordHash,
-    role: UserRole.IT_STAFF,
-    isActive: true,
-    mustChangePassword: false,
-  },
-});
+    data: {
+      name: "IT Staff Second Test User",
+      email: secondStaffEmail,
+      passwordHash,
+      role: UserRole.IT_STAFF,
+      isActive: true,
+      mustChangePassword: false,
+    },
+  });
 
   requesterId = requester.id;
   staffId = staff.id;
@@ -170,19 +170,19 @@ describe("Lab 3 IT Staff ticket queue", () => {
 
 describe("Lab 3 IT Staff ticket details", () => {
   it("allows IT Staff to view ticket details", async () => {
-  const response = await staffAgent
-    .get(`/api/it-staff/tickets/${ticketId}`)
-    .expect(200);
+    const response = await staffAgent
+      .get(`/api/it-staff/tickets/${ticketId}`)
+      .expect(200);
 
-  expect(response.body.id).toBe(ticketId);
-  expect(response.body.requester.id).toBe(requesterId);
-  expect(response.body.ticketNumber).toBeTruthy();
-  expect(response.body.summary).toBe("IT Staff queue test ticket");
-  expect(response.body.currentStatus).toBe("NEW");
-  expect(response.body.assignedStaff).toBeNull();
-  expect(response.body.publicComments).toEqual([]);
-  expect(response.body.internalNotes).toEqual([]);
-});
+    expect(response.body.id).toBe(ticketId);
+    expect(response.body.requester.id).toBe(requesterId);
+    expect(response.body.ticketNumber).toBeTruthy();
+    expect(response.body.summary).toBe("IT Staff queue test ticket");
+    expect(response.body.currentStatus).toBe("NEW");
+    expect(response.body.assignedStaff).toBeNull();
+    expect(response.body.publicComments).toEqual([]);
+    expect(response.body.internalNotes).toEqual([]);
+  });
 
   it("returns 404 for a missing ticket", async () => {
     await staffAgent
@@ -408,37 +408,85 @@ describe("Lab 3 IT Staff internal notes", () => {
 
 describe("Lab 3 IT Staff status updates", () => {
   it("allows IT Staff to update ticket status", async () => {
+    await prisma.ticket.update({
+      where: { id: ticketId },
+      data: { currentStatus: CurrentStatus.OPEN },
+    });
+
     const response = await staffAgent
       .patch(`/api/it-staff/tickets/${ticketId}/status`)
       .send({
-        currentStatus: "IN_PROGRESS",
+        currentStatus: CurrentStatus.IN_PROGRESS,
       })
       .expect(200);
 
     expect(response.body.id).toBe(ticketId);
-    expect(response.body.currentStatus).toBe("IN_PROGRESS");
+    expect(response.body.currentStatus).toBe(CurrentStatus.IN_PROGRESS);
   });
 
-  it("allows the required Lab 3 ticket statuses", async () => {
-    const statuses = [
-      "NEW",
-      "OPEN",
-      "IN_PROGRESS",
-      "WAITING_FOR_REQUESTER",
-      "RESOLVED",
-      "CLOSED",
-      "REOPENED",
-      "CANCELLED",
+  it("allows only the permitted Lab 3 status transitions", async () => {
+    const transitions: Array<[CurrentStatus, CurrentStatus]> = [
+      [CurrentStatus.NEW, CurrentStatus.OPEN],
+      [CurrentStatus.NEW, CurrentStatus.CANCELLED],
+
+      [CurrentStatus.OPEN, CurrentStatus.IN_PROGRESS],
+      [CurrentStatus.OPEN, CurrentStatus.WAITING_FOR_REQUESTER],
+      [CurrentStatus.OPEN, CurrentStatus.CANCELLED],
+
+      [CurrentStatus.IN_PROGRESS, CurrentStatus.WAITING_FOR_REQUESTER],
+      [CurrentStatus.IN_PROGRESS, CurrentStatus.RESOLVED],
+      [CurrentStatus.IN_PROGRESS, CurrentStatus.CANCELLED],
+
+      [CurrentStatus.WAITING_FOR_REQUESTER, CurrentStatus.IN_PROGRESS],
+      [CurrentStatus.WAITING_FOR_REQUESTER, CurrentStatus.RESOLVED],
+      [CurrentStatus.WAITING_FOR_REQUESTER, CurrentStatus.CANCELLED],
+
+      [CurrentStatus.RESOLVED, CurrentStatus.CLOSED],
+      [CurrentStatus.RESOLVED, CurrentStatus.REOPENED],
+
+      [CurrentStatus.CLOSED, CurrentStatus.REOPENED],
+
+      [CurrentStatus.REOPENED, CurrentStatus.IN_PROGRESS],
+      [CurrentStatus.REOPENED, CurrentStatus.CANCELLED],
+
+      [CurrentStatus.CANCELLED, CurrentStatus.REOPENED],
     ];
 
-    for (const currentStatus of statuses) {
+    for (const [from, to] of transitions) {
+      await prisma.ticket.update({
+        where: { id: ticketId },
+        data: { currentStatus: from },
+      });
+
       const response = await staffAgent
         .patch(`/api/it-staff/tickets/${ticketId}/status`)
-        .send({ currentStatus })
+        .send({ currentStatus: to })
         .expect(200);
 
-      expect(response.body.currentStatus).toBe(currentStatus);
+      expect(response.body.id).toBe(ticketId);
+      expect(response.body.currentStatus).toBe(to);
     }
+  });
+
+  it("rejects a status transition not allowed by Lab 3", async () => {
+    await prisma.ticket.update({
+      where: { id: ticketId },
+      data: { currentStatus: CurrentStatus.NEW },
+    });
+
+    const response = await staffAgent
+      .patch(`/api/it-staff/tickets/${ticketId}/status`)
+      .send({ currentStatus: CurrentStatus.CLOSED })
+      .expect(400);
+
+    expect(response.body.error.code).toBe("INVALID_STATUS_TRANSITION");
+
+    const ticket = await prisma.ticket.findUnique({
+      where: { id: ticketId },
+      select: { currentStatus: true },
+    });
+
+    expect(ticket?.currentStatus).toBe(CurrentStatus.NEW);
   });
 
   it("rejects an invalid ticket status", async () => {
