@@ -1,20 +1,26 @@
 import { useEffect, useState } from "react";
+import type { FormEvent } from "react";
 import {
   Attachment,
   ITStaffTicket,
   addITStaffInternalNote,
   addITStaffPublicComment,
   claimITStaffTicket,
+  createActionTaken,
   downloadITStaffAttachment,
+  getActionsTaken,
   getITStaffTicket,
   getITStaffUsers,
   reassignITStaffTicket,
+  updateActionTaken,
   updateITStaffPriority,
   updateITStaffResolutionSummary,
   updateITStaffTicketStatus,
 } from "./api.js";
+import type { ActionTaken, ActionTakenInput } from "./api.js";
 import type { User } from "./authApi.js";
 import type { ITStaffUser } from "./api.js";
+
 
 interface ITStaffTicketDetailProps {
   user: User;
@@ -65,10 +71,24 @@ const [internalNote, setInternalNote] =
   useState("");
 
 const [activeTab, setActiveTab] = useState<
-  "comments" | "notes" | "attachments" | "actions"
+  "comments" | "notes" | "attachments" | "actions" | "management"
 >("comments");
 
 const [staffUsers, setStaffUsers] = useState<ITStaffUser[]>([]);
+
+const [actionsTaken, setActionsTaken] = useState<ActionTaken[]>([]);
+const [actionsLoading, setActionsLoading] = useState(false);
+const [actionSaving, setActionSaving] = useState(false);
+const [actionError, setActionError] = useState("");
+const [actionSuccess, setActionSuccess] = useState("");
+const [editingActionId, setEditingActionId] = useState<number | null>(null);
+
+const [actionDateTime, setActionDateTime] = useState("");
+const [actionDescription, setActionDescription] = useState("");
+const [actionResult, setActionResult] = useState("");
+const [followUpRequired, setFollowUpRequired] = useState(false);
+const [followUpNote, setFollowUpNote] = useState("");
+const [attachmentNotes, setAttachmentNotes] = useState("");
 
   useEffect(() => {
   async function loadTicket() {
@@ -293,6 +313,163 @@ alert("Ticket reassigned.");
     );
   }
 }
+
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadActions() {
+      setActionsLoading(true);
+      setActionError("");
+
+      try {
+        const data = await getActionsTaken(ticketId);
+
+        if (!cancelled) {
+          setActionsTaken(
+            [...data].sort((a, b) => {
+              const dateDifference =
+                new Date(b.actionDateTime).getTime() -
+                new Date(a.actionDateTime).getTime();
+
+              return dateDifference !== 0
+                ? dateDifference
+                : b.id - a.id;
+            }),
+          );
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setActionError(
+            err instanceof Error
+              ? err.message
+              : "Unable to load Actions Taken.",
+          );
+        }
+      } finally {
+        if (!cancelled) {
+          setActionsLoading(false);
+        }
+      }
+    }
+
+    void loadActions();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [ticketId]);
+
+  function resetActionForm() {
+    setEditingActionId(null);
+    setActionDateTime("");
+    setActionDescription("");
+    setActionResult("");
+    setFollowUpRequired(false);
+    setFollowUpNote("");
+    setAttachmentNotes("");
+    setActionError("");
+    setActionSuccess("");
+  }
+
+  function editAction(action: ActionTaken) {
+    const date = new Date(action.actionDateTime);
+    const localDate = new Date(
+      date.getTime() - date.getTimezoneOffset() * 60000,
+    );
+
+    setEditingActionId(action.id);
+    setActionDateTime(localDate.toISOString().slice(0, 16));
+    setActionDescription(action.actionDescription);
+    setActionResult(action.result);
+    setFollowUpRequired(action.followUpRequired);
+    setFollowUpNote(action.followUpNote ?? "");
+    setAttachmentNotes(action.attachmentNotes ?? "");
+    setActionError("");
+    setActionSuccess("");
+  }
+
+  async function saveActionTaken(
+  event: FormEvent<HTMLFormElement>,
+) {
+    event.preventDefault();
+
+    if (actionSaving) return;
+
+    if (followUpRequired && !followUpNote.trim()) {
+      setActionError("Please enter a follow-up note.");
+      return;
+    }
+
+    if (!actionDateTime || !Number.isFinite(new Date(actionDateTime).getTime())) {
+      setActionError("Please enter a valid action date and time.");
+      return;
+    }
+
+    const input: ActionTakenInput = {
+      actionDateTime: new Date(actionDateTime).toISOString(),
+      actionDescription: actionDescription.trim(),
+      result: actionResult.trim(),
+      followUpRequired,
+      followUpNote: followUpRequired
+        ? followUpNote.trim()
+        : null,
+      attachmentNotes: attachmentNotes.trim() || null,
+    };
+
+    if (!input.actionDescription || !input.result) {
+      setActionError("Please complete the description and result.");
+      return;
+    }
+
+    setActionSaving(true);
+    setActionError("");
+    setActionSuccess("");
+
+    try {
+      if (editingActionId === null) {
+        await createActionTaken(ticketId, input);
+        setActionSuccess("Action Taken recorded successfully.");
+      } else {
+        await updateActionTaken(
+          ticketId,
+          editingActionId,
+          input,
+        );
+        setActionSuccess("Action Taken updated successfully.");
+      }
+
+      const refreshedActions = await getActionsTaken(ticketId);
+
+      setActionsTaken(
+        [...refreshedActions].sort((a, b) => {
+          const dateDifference =
+            new Date(b.actionDateTime).getTime() -
+            new Date(a.actionDateTime).getTime();
+
+          return dateDifference !== 0
+            ? dateDifference
+            : b.id - a.id;
+        }),
+      );
+
+      setEditingActionId(null);
+      setActionDateTime("");
+      setActionDescription("");
+      setActionResult("");
+      setFollowUpRequired(false);
+      setFollowUpNote("");
+      setAttachmentNotes("");
+    } catch (err) {
+      setActionError(
+        err instanceof Error
+          ? err.message
+          : "Unable to save Action Taken. Please try again.",
+      );
+    } finally {
+      setActionSaving(false);
+    }
+  }
 
   if (loading) {
     return (
@@ -560,15 +737,27 @@ alert("Ticket reassigned.");
       📎 Attachments
       <span>{ticket.attachments.length}</span>
     </button>
+    <button
+  type="button"
+  className={
+    activeTab === "actions"
+      ? "ticket-tab active"
+      : "ticket-tab"
+  }
+  onClick={() => setActiveTab("actions")}
+>
+  Actions Taken
+  <span>{actionsTaken.length}</span>
+</button>
 
     <button
       type="button"
       className={
-        activeTab === "actions"
+        activeTab === "management"
           ? "ticket-tab active"
           : "ticket-tab"
       }
-      onClick={() => setActiveTab("actions")}
+      onClick={() => setActiveTab("management")}
     >
       🛠 Service Actions
     </button>
@@ -801,36 +990,27 @@ alert("Ticket reassigned.");
   )}
 
 
-  {activeTab === "actions" && (
+  {activeTab === "management" && (
     <section className="tab-panel service-actions-panel">
-
       <div className="section-heading">
-
         <div>
           <h2>Service Actions</h2>
-          <p>
-            Actions available to IT Staff for this ticket.
-          </p>
+          <p>Manage ticket ownership, priority, and status.</p>
         </div>
-
       </div>
 
       <div className="service-action-grid">
-
         <div className="service-action-card">
-
           <strong>Ticket Ownership</strong>
 
           <p>
             Current owner:{" "}
             {owner === null
               ? "Unassigned"
-              : ticket.assignedStaff?.name ??
-                "Assigned IT Staff"}
+              : ticket.assignedStaff?.name ?? "Assigned IT Staff"}
           </p>
 
           <div className="action-buttons">
-
             <button
               type="button"
               className="secondary-button"
@@ -846,71 +1026,48 @@ alert("Ticket reassigned.");
             >
               Reassign
             </button>
-
           </div>
-
         </div>
 
-
         <div className="service-action-card">
-
           <strong>IT Priority</strong>
 
           <select
             value={itPriority}
             onChange={(event) =>
-              setItPriority(
-                event.target.value as ITPriority
-              )
+              setItPriority(event.target.value as ITPriority)
             }
           >
             <option value="LOW">Low</option>
             <option value="MEDIUM">Medium</option>
             <option value="HIGH">High</option>
           </select>
-
         </div>
 
-
         <div className="service-action-card">
-
           <strong>Ticket Status</strong>
 
           <select
             value={status}
             onChange={(event) =>
-              setStatus(
-                event.target.value as TicketStatus
-              )
+              setStatus(event.target.value as TicketStatus)
             }
           >
+            <option value="NEW">New</option>
             <option value="OPEN">Open</option>
-            <option value="IN_PROGRESS">
-              In Progress
-            </option>
+            <option value="IN_PROGRESS">In Progress</option>
             <option value="WAITING_FOR_REQUESTER">
               Waiting for Requester
             </option>
-            <option value="RESOLVED">
-              Resolved
-            </option>
-            <option value="CLOSED">
-              Closed
-            </option>
-            <option value="REOPENED">
-              Reopened
-            </option>
-            <option value="CANCELLED">
-              Cancelled
-            </option>
+            <option value="RESOLVED">Resolved</option>
+            <option value="CLOSED">Closed</option>
+            <option value="REOPENED">Reopened</option>
+            <option value="CANCELLED">Cancelled</option>
           </select>
-
         </div>
-
       </div>
 
       <div className="ticket-action-row">
-
         <button
           type="button"
           className="service-save-button"
@@ -918,14 +1075,203 @@ alert("Ticket reassigned.");
         >
           Save Changes
         </button>
-
       </div>
-
     </section>
   )}
 
-  </section>
+  {activeTab === "actions" && (
+    <section className="tab-panel actions-taken-section">
+      <div className="section-heading">
+        <div>
+          <h2>Actions Taken History</h2>
+          <p>Record the work performed and its outcome.</p>
+        </div>
+      </div>
 
+      {actionError && (
+        <p role="alert" className="action-message action-error">
+          {actionError}
+        </p>
+      )}
+
+      {actionSuccess && (
+        <p role="status" className="action-message action-success">
+          {actionSuccess}
+        </p>
+      )}
+
+      <form onSubmit={saveActionTaken} className="action-taken-form">
+        <h3>
+          {editingActionId === null
+            ? "Record a New Action"
+            : "Edit Action Taken"}
+        </h3>
+
+        <label>
+          Action Date and Time
+          <input
+            type="datetime-local"
+            value={actionDateTime}
+            onChange={(event) => setActionDateTime(event.target.value)}
+            required
+            disabled={actionSaving}
+          />
+        </label>
+
+        <label>
+          Action Description
+          <textarea
+            value={actionDescription}
+            onChange={(event) => setActionDescription(event.target.value)}
+            maxLength={2000}
+            required
+            rows={3}
+            disabled={actionSaving}
+            placeholder="Describe the work performed..."
+          />
+        </label>
+
+        <label>
+          Result
+          <textarea
+            value={actionResult}
+            onChange={(event) => setActionResult(event.target.value)}
+            maxLength={2000}
+            required
+            rows={3}
+            disabled={actionSaving}
+            placeholder="Describe the outcome..."
+          />
+        </label>
+
+        <label className="follow-up-checkbox">
+          <input
+            type="checkbox"
+            checked={followUpRequired}
+            onChange={(event) => setFollowUpRequired(event.target.checked)}
+            disabled={actionSaving}
+          />
+          Follow-up Required
+        </label>
+
+        {followUpRequired && (
+          <label>
+            Follow-up Note
+            <textarea
+              value={followUpNote}
+              onChange={(event) => setFollowUpNote(event.target.value)}
+              maxLength={2000}
+              required
+              rows={2}
+              disabled={actionSaving}
+              placeholder="Explain what follow-up is needed..."
+            />
+          </label>
+        )}
+
+        <label>
+          Attachment Notes (Optional)
+          <textarea
+            value={attachmentNotes}
+            onChange={(event) => setAttachmentNotes(event.target.value)}
+            maxLength={2000}
+            rows={2}
+            disabled={actionSaving}
+            placeholder="Add notes about relevant attachments..."
+          />
+        </label>
+
+        <p className="action-performer-note">
+          Recorded by: {user.name} (your authenticated account)
+        </p>
+
+        <div className="action-buttons">
+          <button
+            type="submit"
+            className="service-save-button"
+            disabled={actionSaving}
+          >
+            {actionSaving
+              ? "Saving..."
+              : editingActionId === null
+                ? "Record Action"
+                : "Save Action Changes"}
+          </button>
+
+          {editingActionId !== null && (
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={resetActionForm}
+              disabled={actionSaving}
+            >
+              Cancel Edit
+            </button>
+          )}
+        </div>
+      </form>
+
+      <div className="actions-taken-list">
+        <h3>Recorded Actions ({actionsTaken.length})</h3>
+
+        {actionsLoading ? (
+          <p>Loading action history...</p>
+        ) : actionsTaken.length === 0 ? (
+          <p>No actions have been recorded for this ticket yet.</p>
+        ) : (
+          actionsTaken.map((action) => (
+            <article className="action-history-card" key={action.id}>
+              <div className="action-history-header">
+                <h4>{action.actionDescription}</h4>
+
+                <button
+                  type="button"
+                  className="secondary-button"
+                  onClick={() => editAction(action)}
+                  disabled={actionSaving}
+                >
+                  Edit
+                </button>
+              </div>
+
+              <p>
+                <strong>Date and Time:</strong>{" "}
+                {new Date(action.actionDateTime).toLocaleString()}
+              </p>
+
+              <p>
+                <strong>Result:</strong> {action.result}
+              </p>
+
+              <p>
+                <strong>Performed By:</strong>{" "}
+                {action.performedBy.name}
+              </p>
+
+              <p>
+                <strong>Follow-up Required:</strong>{" "}
+                {action.followUpRequired ? "Yes" : "No"}
+              </p>
+
+              {action.followUpRequired && action.followUpNote && (
+                <p>
+                  <strong>Follow-up Note:</strong> {action.followUpNote}
+                </p>
+              )}
+
+              {action.attachmentNotes && (
+                <p>
+                  <strong>Attachment Notes:</strong>{" "}
+                  {action.attachmentNotes}
+                </p>
+              )}
+            </article>
+          ))
+        )}
+      </div>
+    </section>
+  )}
+</section>
 </section>
 
       <style>{`
@@ -1732,6 +2078,92 @@ alert("Ticket reassigned.");
 .comment-submit-button:hover {
   background: #0B7A46;
 }
+
+        .actions-taken-section {
+  margin-top: 0;
+  padding-top: 20px;
+  border-top: none;
+}
+
+        .action-taken-form {
+          display: grid;
+          gap: 16px;
+          margin: 20px 0 28px;
+          padding: 20px;
+          border: 1px solid #dfe7e2;
+          border-radius: 12px;
+          background: #f8fbf9;
+        }
+
+        .action-taken-form label {
+          display: grid;
+          gap: 8px;
+          font-weight: 600;
+        }
+
+        .action-taken-form input:not([type="checkbox"]),
+        .action-taken-form textarea {
+          width: 100%;
+          box-sizing: border-box;
+          padding: 10px 12px;
+          border: 1px solid #cbd8cf;
+          border-radius: 8px;
+          font: inherit;
+        }
+
+        .action-taken-form textarea {
+          resize: vertical;
+        }
+
+        .action-taken-form .follow-up-checkbox {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+        }
+
+        .action-performer-note {
+          margin: 0;
+          color: #52665a;
+          font-size: 0.9rem;
+        }
+
+        .actions-taken-list {
+          display: grid;
+          gap: 14px;
+        }
+
+        .action-history-card {
+          padding: 18px;
+          border: 1px solid #dfe7e2;
+          border-radius: 10px;
+          overflow-wrap: anywhere;
+        }
+
+        .action-history-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: flex-start;
+          gap: 12px;
+        }
+
+        .action-history-card p {
+          margin: 10px 0;
+        }
+
+        .action-message {
+          padding: 12px;
+          border-radius: 8px;
+        }
+
+        .action-error {
+          color: #a12626;
+          background: #fff0f0;
+        }
+
+        .action-success {
+          color: #17663a;
+          background: #eaf6ef;
+        }
 
       `}</style>
     </main>

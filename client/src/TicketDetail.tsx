@@ -2,13 +2,14 @@ import { useEffect, useState } from "react";
 import {
   Attachment,
   CreatedTicket,
+  getActionsTaken,
   getAttachmentDownloadUrl,
   getTicketById,
   removeAttachment,
   uploadAttachment,
 } from "./api.js";
 import type { User } from "./authApi.js";
-
+import type { ActionTaken } from "./api.js";
 interface TicketDetailProps {
   user: User;
   ticketId: number;
@@ -37,6 +38,9 @@ const [selectedFile, setSelectedFile] = useState<File | null>(null);
 const [uploadingAttachment, setUploadingAttachment] = useState(false);
 const [attachmentError, setAttachmentError] = useState("");
 const [removingAttachmentId, setRemovingAttachmentId] = useState<number | null>(null);
+const [actionsTaken, setActionsTaken] = useState<ActionTaken[]>([]);
+const [actionsLoading, setActionsLoading] = useState(true);
+const [actionsError, setActionsError] = useState("");
   useEffect(() => {
     async function loadTicket() {
       setLoading(true);
@@ -66,7 +70,46 @@ const [removingAttachmentId, setRemovingAttachmentId] = useState<number | null>(
   function displayStatus(): DisplayStatus {
   return ticket?.currentStatus as DisplayStatus;
 }
+useEffect(() => {
+  let cancelled = false;
 
+  async function loadActionsTaken() {
+    setActionsLoading(true);
+    setActionsError("");
+
+    try {
+      const data = await getActionsTaken(ticketId);
+
+      if (!cancelled) {
+        setActionsTaken(
+          [...data].sort(
+            (a, b) =>
+              new Date(b.actionDateTime).getTime() -
+              new Date(a.actionDateTime).getTime(),
+          ),
+        );
+      }
+    } catch (err) {
+      if (!cancelled) {
+        setActionsError(
+          err instanceof Error
+            ? err.message
+            : "Unable to load Actions Taken.",
+        );
+      }
+    } finally {
+      if (!cancelled) {
+        setActionsLoading(false);
+      }
+    }
+  }
+
+  void loadActionsTaken();
+
+  return () => {
+    cancelled = true;
+  };
+}, [ticketId]);
   function statusLabel(value: DisplayStatus) {
   if (value === "NEW") return "New";
   if (value === "OPEN") return "Open";
@@ -352,6 +395,70 @@ async function handleRemoveAttachment(
             {ticket.description}
           </p>
         </div>
+
+        <div className="ticket-detail-section">
+  <h2>Actions Taken</h2>
+
+  {actionsLoading ? (
+    <p>Loading Actions Taken...</p>
+  ) : actionsError ? (
+    <p role="alert">{actionsError}</p>
+  ) : actionsTaken.length === 0 ? (
+    <p>No Actions Taken have been recorded yet.</p>
+  ) : (
+    <div className="attachment-list">
+      {actionsTaken.map((action) => (
+        <div
+          key={action.id}
+          className="detail-field"
+        >
+          <div>
+            <span>Action Date and Time</span>
+            <strong>
+              {formatDate(action.actionDateTime)}
+            </strong>
+          </div>
+
+          <div>
+            <span>Action Description</span>
+            <p>{action.actionDescription}</p>
+          </div>
+
+          <div style={{ marginTop: "12px" }}>
+            <span>Result</span>
+            <p>{action.result}</p>
+          </div>
+
+          <div style={{ marginTop: "12px" }}>
+            <span>Performed By</span>
+            <strong>{action.performedBy.name}</strong>
+          </div>
+
+          <div style={{ marginTop: "12px" }}>
+            <span>Follow-up Required</span>
+            <strong>
+              {action.followUpRequired ? "Yes" : "No"}
+            </strong>
+          </div>
+
+          {action.followUpRequired && action.followUpNote && (
+            <div style={{ marginTop: "12px" }}>
+              <span>Follow-up Note</span>
+              <p>{action.followUpNote}</p>
+            </div>
+          )}
+
+          {action.attachmentNotes && (
+            <div style={{ marginTop: "12px" }}>
+              <span>Attachment Notes</span>
+              <p>{action.attachmentNotes}</p>
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  )}
+</div>
 
         <div className="ticket-detail-section">
   <h2>Attachments</h2>
