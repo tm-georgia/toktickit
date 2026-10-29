@@ -94,6 +94,116 @@ export interface ITStaffComment {
   };
 }
 
+export interface ActionTaken {
+  id: number;
+  ticketId: number;
+  actionDateTime: string;
+  actionDescription: string;
+  result: string;
+  performedBy: {
+    id: number;
+    name: string;
+  };
+  followUpRequired: boolean;
+  followUpNote: string | null;
+  attachmentNotes: string | null;
+}
+
+export interface ActionTakenInput {
+  actionDateTime: string;
+  actionDescription: string;
+  result: string;
+  followUpRequired: boolean;
+  followUpNote: string | null;
+  attachmentNotes: string | null;
+}
+
+export async function getActionsTaken(
+  ticketId: number,
+): Promise<ActionTaken[]> {
+  const response = await fetch(
+    `${API_URL}/api/tickets/${ticketId}/actions-taken`,
+    {
+      credentials: "include",
+    },
+  );
+
+  if (!response.ok) {
+    throw new Error("Unable to load Actions Taken.");
+  }
+
+  return response.json();
+}
+
+export async function createActionTaken(
+  ticketId: number,
+  input: ActionTakenInput,
+): Promise<ActionTaken> {
+  const response = await fetch(
+    `${API_URL}/api/tickets/${ticketId}/actions-taken`,
+    {
+      method: "POST",
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(input),
+    },
+  );
+
+  if (!response.ok) {
+    let message = "Unable to create Action Taken.";
+
+    try {
+      const body = await response.json();
+      if (typeof body.error?.message === "string") {
+        message = body.error.message;
+      }
+    } catch {
+      // Keep the default error message.
+    }
+
+    throw new Error(message);
+  }
+
+  return response.json();
+}
+
+export async function updateActionTaken(
+  ticketId: number,
+  actionId: number,
+  input: ActionTakenInput,
+): Promise<ActionTaken> {
+  const response = await fetch(
+    `${API_URL}/api/tickets/${ticketId}/actions-taken/${actionId}`,
+    {
+      method: "PATCH",
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(input),
+    },
+  );
+
+  if (!response.ok) {
+    let message = "Unable to update Action Taken.";
+
+    try {
+      const body = await response.json();
+      if (typeof body.error?.message === "string") {
+        message = body.error.message;
+      }
+    } catch {
+      // Keep the default error message.
+    }
+
+    throw new Error(message);
+  }
+
+  return response.json();
+}
+
 export interface Attachment {
   id: number;
   ticketId: number;
