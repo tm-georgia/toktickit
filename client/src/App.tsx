@@ -6,6 +6,7 @@ import TicketDetail from "./TicketDetail.js";
 import ITStaffTicketDetail from "./ITStaffTicketDetail.js";
 import ITStaffTicketQueue from "./ITStaffTicketQueue.js";
 import AdminUserManagement from "./AdminUserManagement.js";
+import RequesterDashboard from "./RequesterDashboard.js";
 
 import {
   getCategories,
@@ -25,6 +26,7 @@ type Page =
   | "home"
   | "login"
   | "change-password"
+  | "requester-dashboard"
   | "my-tickets"
   | "create-ticket"
   | "ticket-detail"
@@ -439,6 +441,13 @@ function RoleHome({
                 </p>
 
                 <div className="home-actions">
+                  <button
+  type="button"
+  className="primary-button"
+  onClick={() => onNavigate("requester-dashboard")}
+>
+  My Dashboard
+</button>
                   <button
                     type="button"
                     onClick={() =>

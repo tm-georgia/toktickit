@@ -232,6 +232,37 @@ export interface TicketListItem {
   relatedSystem: RelatedSystem;
 }
 
+export type DashboardTicketStatus =
+  | "NEW"
+  | "OPEN"
+  | "IN_PROGRESS"
+  | "WAITING_FOR_REQUESTER"
+  | "RESOLVED"
+  | "CLOSED"
+  | "REOPENED"
+  | "CANCELLED";
+
+export interface RequesterDashboardTicket {
+  id: number;
+  ticketNumber: string;
+  summary: string;
+  currentStatus: DashboardTicketStatus;
+  requestedPriority: "LOW" | "MEDIUM" | "HIGH";
+  updatedAt: string;
+}
+
+export interface RequesterDashboardResponse {
+  metrics: {
+    openTickets: number;
+    waitingForRequester: number;
+    recentlyUpdated: number;
+    recentlyResolved: number;
+  };
+  recentTickets: RequesterDashboardTicket[];
+  recentlyResolvedTickets: RequesterDashboardTicket[];
+  attentionTickets: RequesterDashboardTicket[];
+}
+
 export interface GetTicketsParams {
   search?: string;
   categoryId?: number;
@@ -1151,4 +1182,21 @@ export async function resetAdminUserPassword(
     await response.json();
 
   return data.user;
+}
+
+
+
+export async function getRequesterDashboard(): Promise<RequesterDashboardResponse> {
+  const response = await fetch(
+    `${API_URL}/api/dashboard/requester`,
+    {
+      credentials: "include",
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error("Unable to load requester dashboard");
+  }
+
+  return response.json();
 }

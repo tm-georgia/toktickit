@@ -43,6 +43,136 @@ app.get("/api/health", (_req: Request, res: Response) => {
 // who has completed any required initial-password change.
 app.use("/api", requireAuthentication, requirePasswordChangeCompleted);
 app.use("/api/tickets", actionsTakenRouter);
+
+
+const DASHBOARD_RECENT_DAYS = 7;
+const DASHBOARD_LIST_LIMIT = 5;
+
+const OPEN_TICKET_STATUSES: CurrentStatus[] = [
+  CurrentStatus.NEW,
+  CurrentStatus.OPEN,
+  CurrentStatus.IN_PROGRESS,
+  CurrentStatus.WAITING_FOR_REQUESTER,
+  CurrentStatus.REOPENED,
+];
+
+// GET /api/dashboard/requester
+// All dashboard data is scoped to the authenticated Requester.
+app.get(
+  "/api/dashboard/requester",
+  requireRoles(UserRole.REQUESTER),
+  async (req: Request, res: Response) => {
+    try {
+      const prisma = getPrisma();
+      const requesterId = req.auth!.user.id;
+      const recentCutoff = new Date(
+        Date.now() - DASHBOARD_RECENT_DAYS * 24 * 60 * 60 * 1000,
+      );
+
+      const requesterScope = { requesterId };
+
+      const [
+        openTickets,
+        waitingForRequester,
+        recentlyUpdated,
+        recentlyResolved,
+        recentTickets,
+        recentlyResolvedTickets,
+        attentionTickets,
+      ] = await Promise.all([
+        prisma.ticket.count({
+          where: {
+            ...requesterScope,
+            currentStatus: { in: OPEN_TICKET_STATUSES },
+          },
+        }),
+        prisma.ticket.count({
+          where: {
+            ...requesterScope,
+            currentStatus: CurrentStatus.WAITING_FOR_REQUESTER,
+          },
+        }),
+        prisma.ticket.count({
+          where: {
+            ...requesterScope,
+            updatedAt: { gte: recentCutoff },
+          },
+        }),
+        prisma.ticket.count({
+          where: {
+            ...requesterScope,
+            currentStatus: CurrentStatus.RESOLVED,
+            updatedAt: { gte: recentCutoff },
+          },
+        }),
+        prisma.ticket.findMany({
+          where: requesterScope,
+          orderBy: { updatedAt: "desc" },
+          take: DASHBOARD_LIST_LIMIT,
+          select: {
+            id: true,
+            ticketNumber: true,
+            summary: true,
+            currentStatus: true,
+            requestedPriority: true,
+            updatedAt: true,
+          },
+        }),
+        prisma.ticket.findMany({
+          where: {
+            ...requesterScope,
+            currentStatus: CurrentStatus.RESOLVED,
+            updatedAt: { gte: recentCutoff },
+          },
+          orderBy: { updatedAt: "desc" },
+          take: DASHBOARD_LIST_LIMIT,
+          select: {
+            id: true,
+            ticketNumber: true,
+            summary: true,
+            currentStatus: true,
+            requestedPriority: true,
+            updatedAt: true,
+          },
+        }),
+        prisma.ticket.findMany({
+          where: {
+            ...requesterScope,
+            currentStatus: CurrentStatus.WAITING_FOR_REQUESTER,
+          },
+          orderBy: { updatedAt: "desc" },
+          take: DASHBOARD_LIST_LIMIT,
+          select: {
+            id: true,
+            ticketNumber: true,
+            summary: true,
+            currentStatus: true,
+            requestedPriority: true,
+            updatedAt: true,
+          },
+        }),
+      ]);
+
+      return res.status(200).json({
+        metrics: {
+          openTickets,
+          waitingForRequester,
+          recentlyUpdated,
+          recentlyResolved,
+        },
+        recentTickets,
+        recentlyResolvedTickets,
+        attentionTickets,
+      });
+    } catch (error) {
+      console.error("Failed to load requester dashboard:", error);
+      return res.status(500).json({
+        error: "Unable to load the requester dashboard.",
+      });
+    }
+  },
+);
+
 // ---------------------------------------------------------------------------
 // Issue 4 — Category list
 // ---------------------------------------------------------------------------
