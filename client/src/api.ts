@@ -254,9 +254,9 @@ export interface RequesterDashboardTicket {
 export interface RequesterDashboardResponse {
   metrics: {
     openTickets: number;
-    waitingForRequester: number;
-    recentlyUpdated: number;
-    recentlyResolved: number;
+    inProgressTickets: number;
+    resolvedTickets: number;
+    closedTickets: number;
   };
   recentTickets: RequesterDashboardTicket[];
   recentlyResolvedTickets: RequesterDashboardTicket[];

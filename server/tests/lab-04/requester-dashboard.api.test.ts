@@ -193,11 +193,11 @@ describe("Requester dashboard API", () => {
       .expect(200);
 
     expect(response.body.metrics).toEqual({
-      openTickets: 2,
-      waitingForRequester: 1,
-      recentlyUpdated: 3,
-      recentlyResolved: 1,
-    });
+  openTickets: 2,
+  inProgressTickets: 0,
+  resolvedTickets: 1,
+  closedTickets: 0,
+});
 
     expect(response.body.recentTickets).toHaveLength(3);
     expect(response.body.recentlyResolvedTickets).toHaveLength(1);

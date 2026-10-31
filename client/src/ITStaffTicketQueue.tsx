@@ -11,10 +11,13 @@ type Props = {
     email: string;
     role: string;
   };
+  initialFilters?: {
+    status?: string;
+    assignedTo?: string;
+  };
   onOpenTicket: (ticketId: number) => void;
   onBack: () => void;
 };
-
 function formatDate(value: string) {
   return new Date(value).toLocaleString("en-US", {
     month: "short",
@@ -44,6 +47,7 @@ function formatPriority(priority: string | null) {
 
 export default function ITStaffTicketQueue({
   user,
+  initialFilters,
   onOpenTicket,
   onBack,
 }: Props) {
@@ -58,8 +62,12 @@ export default function ITStaffTicketQueue({
   const [forbidden, setForbidden] = useState(false);
 
   const [search, setSearch] = useState("");
-  const [status, setStatus] = useState("");
-  const [assignedTo, setAssignedTo] = useState("");
+ const [status, setStatus] = useState(
+  initialFilters?.status ?? "",
+);
+const [assignedTo, setAssignedTo] = useState(
+  initialFilters?.assignedTo ?? "",
+);
   const [sort, setSort] = useState("updatedDesc");
 
   const [page, setPage] = useState(1);
