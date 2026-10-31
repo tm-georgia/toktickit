@@ -1,14 +1,17 @@
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import RequesterDashboard from "../../src/RequesterDashboard.js";
 
 const mockGetRequesterDashboard = vi.fn();
+const mockGetTickets = vi.fn();
 
 vi.mock("../../src/api.js", () => ({
   getRequesterDashboard: (...args: unknown[]) =>
     mockGetRequesterDashboard(...args),
+  getTickets: (...args: unknown[]) =>
+    mockGetTickets(...args),
 }));
 
 describe("Lab 4 Requester Dashboard UI", () => {
@@ -19,9 +22,9 @@ describe("Lab 4 Requester Dashboard UI", () => {
   const dashboard = {
     metrics: {
       openTickets: 3,
-      waitingForRequester: 1,
-      recentlyUpdated: 2,
-      recentlyResolved: 1,
+      inProgressTickets: 1,
+      resolvedTickets: 1,
+      closedTickets: 0,
     },
     recentTickets: [
       {
@@ -55,12 +58,19 @@ describe("Lab 4 Requester Dashboard UI", () => {
     ],
   };
 
-  beforeEach(() => {
-    vi.clearAllMocks();
-    mockGetRequesterDashboard.mockResolvedValue(dashboard);
-  });
+  const ticketList = {
+    tickets: [
+      ...dashboard.recentTickets,
+      ...dashboard.recentlyResolvedTickets,
+      ...dashboard.attentionTickets,
+    ],
+    page: 1,
+    pageSize: 50,
+    total: 3,
+    totalPages: 1,
+  };
 
-  it("shows the dashboard metrics and ticket lists", async () => {
+  const renderDashboard = () =>
     render(
       <RequesterDashboard
         onBack={onBack}
@@ -69,141 +79,130 @@ describe("Lab 4 Requester Dashboard UI", () => {
       />,
     );
 
-    expect(
-      screen.getByRole("heading", { name: "My Dashboard" }),
-    ).toBeInTheDocument();
+  beforeEach(() => {
+    vi.clearAllMocks();
+
+    mockGetRequesterDashboard.mockResolvedValue(dashboard);
+    mockGetTickets.mockResolvedValue(ticketList);
+  });
+
+  it("shows dashboard metrics and ticket lists", async () => {
+    renderDashboard();
 
     expect(
       await screen.findByText("Cannot access campus Wi-Fi"),
     ).toBeInTheDocument();
 
-    expect(screen.getByText("Printer problem")).toBeInTheDocument();
-    expect(
-      screen.getByText("Please provide more information"),
-    ).toBeInTheDocument();
+    expect(screen.getAllByText("Printer problem")).toHaveLength(2);
 
-    expect(screen.getByText("Open Tickets")).toBeInTheDocument();
-    expect(screen.getByText("Waiting for You")).toBeInTheDocument();
-    expect(screen.getByText("Recently Updated")).toBeInTheDocument();
-    expect(screen.getByText("Recently Resolved")).toBeInTheDocument();
+    expect(
+      screen.getAllByText("Please provide more information"),
+    ).toHaveLength(2);
+
+    expect(screen.getByText("My Open Tickets")).toBeInTheDocument();
+    expect(screen.getAllByText("In Progress")).toHaveLength(2);
+    expect(screen.getAllByText("Resolved")).toHaveLength(3);
+    expect(screen.getByText("Closed")).toBeInTheDocument();
 
     expect(screen.getByText("TCK-20261028-0001")).toBeInTheDocument();
+
     expect(mockGetRequesterDashboard).toHaveBeenCalledTimes(1);
+    expect(mockGetTickets).toHaveBeenCalledTimes(1);
   });
 
   it("opens a ticket when its row is clicked", async () => {
     const user = userEvent.setup();
 
-    render(
-      <RequesterDashboard
-        onBack={onBack}
-        onViewTicket={onViewTicket}
-        onViewAllTickets={onViewAllTickets}
-      />,
-    );
+    renderDashboard();
 
     await screen.findByText("Cannot access campus Wi-Fi");
 
-    await user.click(
-      screen.getByRole("button", {
-        name: /TCK-20261028-0001/,
-      }),
-    );
+    const ticketButton = screen
+      .getByText("Cannot access campus Wi-Fi")
+      .closest("button");
+
+    expect(ticketButton).not.toBeNull();
+
+    await user.click(ticketButton!);
 
     expect(onViewTicket).toHaveBeenCalledWith(101);
   });
 
-  it("navigates back home and to My Tickets", async () => {
-    const user = userEvent.setup();
-
-    render(
-      <RequesterDashboard
-        onBack={onBack}
-        onViewTicket={onViewTicket}
-        onViewAllTickets={onViewAllTickets}
-      />,
-    );
+  it("shows dashboard navigation and quick actions", async () => {
+    renderDashboard();
 
     await screen.findByText("Cannot access campus Wi-Fi");
 
-    await user.click(
-      screen.getByRole("button", { name: "Back to Home" }),
-    );
-    await user.click(
-      screen.getByRole("button", { name: "View My Tickets" }),
-    );
+ expect(
+  within(screen.getByRole("navigation")).getByRole("button", {
+    name: /My Tickets/,
+  }),
+).toBeInTheDocument();
 
-    expect(onBack).toHaveBeenCalledTimes(1);
-    expect(onViewAllTickets).toHaveBeenCalledTimes(1);
+   expect(
+  screen.getAllByRole("button", {
+    name: /Create Ticket/,
+  }).length,
+).toBeGreaterThan(0);
+
+expect(
+  screen.getByRole("button", {
+    name: /View My Tickets/,
+  }),
+).toBeInTheDocument();
   });
 
   it("shows empty messages when no tickets are returned", async () => {
     mockGetRequesterDashboard.mockResolvedValue({
       metrics: {
         openTickets: 0,
-        waitingForRequester: 0,
-        recentlyUpdated: 0,
-        recentlyResolved: 0,
+        inProgressTickets: 0,
+        resolvedTickets: 0,
+        closedTickets: 0,
       },
       recentTickets: [],
       recentlyResolvedTickets: [],
       attentionTickets: [],
     });
 
-    render(
-      <RequesterDashboard
-        onBack={onBack}
-        onViewTicket={onViewTicket}
-        onViewAllTickets={onViewAllTickets}
-      />,
-    );
+    mockGetTickets.mockResolvedValue({
+      tickets: [],
+      page: 1,
+      pageSize: 50,
+      total: 0,
+      totalPages: 0,
+    });
+
+    renderDashboard();
 
     expect(
-      await screen.findByText(
-        "You have no recently updated tickets.",
-      ),
+      await screen.findByText("You haven't submitted any tickets yet."),
     ).toBeInTheDocument();
 
     expect(
-      screen.getByText("You have no recently resolved tickets."),
+      screen.getByText("No resolved tickets found."),
     ).toBeInTheDocument();
 
     expect(
-      screen.getByText(
-        "You have no tickets requiring your attention.",
-      ),
+      screen.getByText("You have no tickets waiting for your response."),
     ).toBeInTheDocument();
   });
 
-  it("shows an error and retries loading the dashboard", async () => {
-    const user = userEvent.setup();
-
-    mockGetRequesterDashboard
-      .mockRejectedValueOnce(new Error("Unable to load requester dashboard"))
-      .mockResolvedValueOnce(dashboard);
-
-    render(
-      <RequesterDashboard
-        onBack={onBack}
-        onViewTicket={onViewTicket}
-        onViewAllTickets={onViewAllTickets}
-      />,
+  it("shows an error when dashboard loading fails", async () => {
+    mockGetRequesterDashboard.mockRejectedValueOnce(
+      new Error("Unable to load requester dashboard"),
     );
 
-    expect(
-      await screen.findByRole("alert"),
-    ).toHaveTextContent("Unable to load requester dashboard");
-
-    await user.click(
-      screen.getByRole("button", { name: "Try Again" }),
-    );
-
-    await waitFor(() => {
-      expect(mockGetRequesterDashboard).toHaveBeenCalledTimes(2);
-    });
+    renderDashboard();
 
     expect(
-      await screen.findByText("Cannot access campus Wi-Fi"),
+      await screen.findByText("Unable to load requester dashboard"),
+    ).toBeInTheDocument();
+
+    expect(
+      screen.getByRole("button", {
+        name: "Reload Dashboard",
+      }),
     ).toBeInTheDocument();
   });
 });

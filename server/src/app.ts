@@ -71,8 +71,12 @@ app.get(
 
       const requesterScope = { requesterId };
 
+      
       const [
         openTickets,
+        inProgressTickets,
+        resolvedTickets,
+        closedTickets,
         waitingForRequester,
         recentlyUpdated,
         recentlyResolved,
@@ -86,18 +90,42 @@ app.get(
             currentStatus: { in: OPEN_TICKET_STATUSES },
           },
         }),
+
+        prisma.ticket.count({
+          where: {
+            ...requesterScope,
+            currentStatus: CurrentStatus.IN_PROGRESS,
+          },
+        }),
+
+        prisma.ticket.count({
+          where: {
+            ...requesterScope,
+            currentStatus: CurrentStatus.RESOLVED,
+          },
+        }),
+
+        prisma.ticket.count({
+          where: {
+            ...requesterScope,
+            currentStatus: CurrentStatus.CLOSED,
+          },
+        }),
+
         prisma.ticket.count({
           where: {
             ...requesterScope,
             currentStatus: CurrentStatus.WAITING_FOR_REQUESTER,
           },
         }),
+
         prisma.ticket.count({
           where: {
             ...requesterScope,
             updatedAt: { gte: recentCutoff },
           },
         }),
+
         prisma.ticket.count({
           where: {
             ...requesterScope,
@@ -105,6 +133,7 @@ app.get(
             updatedAt: { gte: recentCutoff },
           },
         }),
+
         prisma.ticket.findMany({
           where: requesterScope,
           orderBy: { updatedAt: "desc" },
@@ -118,6 +147,7 @@ app.get(
             updatedAt: true,
           },
         }),
+
         prisma.ticket.findMany({
           where: {
             ...requesterScope,
@@ -135,6 +165,7 @@ app.get(
             updatedAt: true,
           },
         }),
+
         prisma.ticket.findMany({
           where: {
             ...requesterScope,
@@ -153,13 +184,14 @@ app.get(
         }),
       ]);
 
+
       return res.status(200).json({
         metrics: {
-          openTickets,
-          waitingForRequester,
-          recentlyUpdated,
-          recentlyResolved,
-        },
+  openTickets,
+  inProgressTickets,
+  resolvedTickets,
+  closedTickets,
+},
         recentTickets,
         recentlyResolvedTickets,
         attentionTickets,

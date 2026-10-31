@@ -172,7 +172,7 @@ itStaffRouter.get(
   "/tickets",
   requireAuthentication,
   requirePasswordChangeCompleted,
-  requireRoles(UserRole.IT_STAFF),
+    requireRoles(UserRole.IT_STAFF, UserRole.ADMINISTRATOR),
   async (req: Request, res: Response) => {
     try {
       const search =

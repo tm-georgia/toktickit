@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import {
   getRequesterDashboard,
+  getTickets,
   type RequesterDashboardResponse,
   type RequesterDashboardTicket,
 } from "./api.js";
@@ -10,60 +11,75 @@ interface RequesterDashboardProps {
   onBack: () => void;
   onViewTicket: (ticketId: number) => void;
   onViewAllTickets: () => void;
+  onCreateTicket?: () => void;
+  userName?: string;
 }
 
-function formatStatus(status: string): string {
+function formatStatus(status: string) {
   return status
-    .toLowerCase()
     .replaceAll("_", " ")
+    .toLowerCase()
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
+function formatDate(date: string) {
+  const parsedDate = new Date(date);
+
+  if (Number.isNaN(parsedDate.getTime())) {
+    return "Date unavailable";
+  }
+
+  return parsedDate.toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function getStatusClass(status: string) {
+  return `status-${status.toLowerCase().replaceAll("_", "-")}`;
+}
+
 function TicketList({
-  title,
   tickets,
-  emptyMessage,
   onViewTicket,
+  emptyMessage,
 }: {
-  title: string;
   tickets: RequesterDashboardTicket[];
-  emptyMessage: string;
   onViewTicket: (ticketId: number) => void;
+  emptyMessage: string;
 }) {
+  if (tickets.length === 0) {
+    return <p>{emptyMessage}</p>;
+  }
+
   return (
-    <section className="dashboard-section">
-      <h2>{title}</h2>
+    <div className="requester-ticket-list">
+      {tickets.map((ticket) => (
+        <button
+          type="button"
+          className="requester-ticket"
+          key={ticket.id}
+          onClick={() => onViewTicket(ticket.id)}
+        >
+          <div className="requester-ticket-main">
+            <strong>{ticket.ticketNumber}</strong>
+            <span>{ticket.summary}</span>
+          </div>
 
-      {tickets.length === 0 ? (
-        <p className="dashboard-empty">{emptyMessage}</p>
-      ) : (
-        <div className="dashboard-ticket-list">
-          {tickets.map((ticket) => (
-            <button
-              className="dashboard-ticket"
-              type="button"
-              key={ticket.id}
-              onClick={() => onViewTicket(ticket.id)}
+          <div className="requester-ticket-meta">
+            <span
+              className={`requester-status ${getStatusClass(ticket.currentStatus)}`}
             >
-              <span className="dashboard-ticket-main">
-                <strong>{ticket.ticketNumber}</strong>
-                <span>{ticket.summary}</span>
-              </span>
+              {formatStatus(ticket.currentStatus)}
+            </span>
 
-              <span className="dashboard-ticket-details">
-                <span className="dashboard-status">
-                  {formatStatus(ticket.currentStatus)}
-                </span>
-                <span>
-                  Updated{" "}
-                  {new Date(ticket.updatedAt).toLocaleDateString()}
-                </span>
-              </span>
-            </button>
-          ))}
-        </div>
-      )}
-    </section>
+            <time>{formatDate(ticket.updatedAt)}</time>
+          </div>
+        </button>
+      ))}
+    </div>
   );
 }
 
@@ -71,134 +87,270 @@ export default function RequesterDashboard({
   onBack,
   onViewTicket,
   onViewAllTickets,
+  onCreateTicket,
+  userName = "Requester",
 }: RequesterDashboardProps) {
   const [dashboard, setDashboard] =
     useState<RequesterDashboardResponse | null>(null);
+
+  const [recentTickets, setRecentTickets] =
+    useState<RequesterDashboardTicket[]>([]);
+
+  const [resolvedTickets, setResolvedTickets] =
+    useState<RequesterDashboardTicket[]>([]);
+
+  const [attentionTickets, setAttentionTickets] =
+    useState<RequesterDashboardTicket[]>([]);
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  async function loadDashboard() {
-    setLoading(true);
-    setError("");
-
-    try {
-      const result = await getRequesterDashboard();
-      setDashboard(result);
-    } catch (cause) {
-      setError(
-        cause instanceof Error
-          ? cause.message
-          : "Unable to load your dashboard.",
-      );
-    } finally {
-      setLoading(false);
-    }
-  }
-
   useEffect(() => {
-    void loadDashboard();
+    let isMounted = true;
+
+    async function loadDashboard() {
+      try {
+        setLoading(true);
+        setError("");
+
+        const [dashboardResult, ticketResult] = await Promise.all([
+          getRequesterDashboard(),
+          getTickets({
+            page: 1,
+            pageSize: 50,
+            sort: "updatedDesc",
+          }),
+        ]);
+
+        const allTickets: RequesterDashboardTicket[] =
+          Array.isArray(ticketResult.tickets)
+            ? ticketResult.tickets.map((ticket) => ({
+                id: ticket.id,
+                ticketNumber: ticket.ticketNumber,
+                summary: ticket.summary,
+                currentStatus: ticket.currentStatus as RequesterDashboardTicket["currentStatus"],
+                requestedPriority: ticket.requestedPriority,
+                updatedAt: ticket.updatedAt,
+              }))
+            : [];
+
+        const recent = allTickets.slice(0, 5);
+
+        const resolved = allTickets
+          .filter((ticket) => ticket.currentStatus === "RESOLVED")
+          .slice(0, 5);
+
+        const attention = allTickets
+          .filter(
+            (ticket) => ticket.currentStatus === "WAITING_FOR_REQUESTER"
+          )
+          .slice(0, 5);
+
+        if (isMounted) {
+          setDashboard(dashboardResult);
+          setRecentTickets(recent);
+          setResolvedTickets(resolved);
+          setAttentionTickets(attention);
+        }
+      } catch (err) {
+        if (isMounted) {
+          setError(
+            err instanceof Error
+              ? err.message
+              : "Unable to load your dashboard."
+          );
+        }
+      } finally {
+        if (isMounted) {
+          setLoading(false);
+        }
+      }
+    }
+
+    loadDashboard();
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
-  return (
-    <div className="app-shell">
-      <header className="app-header">
-        <div>
-          <div className="brand-mark">TokTickIT</div>
-          <span>Ticketing System</span>
-        </div>
+  const metrics = dashboard
+    ? [
+        {
+          title: "My Open Tickets",
+          count: dashboard.metrics.openTickets,
+        },
+        {
+          title: "In Progress",
+          count: dashboard.metrics.inProgressTickets,
+        },
+        {
+          title: "Resolved",
+          count: dashboard.metrics.resolvedTickets,
+        },
+        {
+          title: "Closed",
+          count: dashboard.metrics.closedTickets,
+        },
+      ]
+    : [];
 
-        <button type="button" onClick={onBack}>
-          Back to Home
+  return (
+    <div className="requester-dashboard-page">
+      <header className="requester-navbar">
+        <button
+          className="requester-brand"
+          onClick={onBack}
+          type="button"
+        >
+          <span className="requester-logo">◷</span>
+          <span>TokTickIT</span>
+        </button>
+
+        <nav className="requester-nav-links">
+          <button
+            className="requester-nav-link active"
+            type="button"
+            onClick={onViewAllTickets}
+          >
+            <span>▣</span>
+            My Tickets
+          </button>
+
+          <button
+            className="requester-nav-link"
+            type="button"
+            onClick={onCreateTicket}
+          >
+            <span>⊕</span>
+            Create Ticket
+          </button>
+        </nav>
+
+        <button className="requester-profile" type="button">
+          <span className="requester-avatar">
+            {userName.charAt(0).toUpperCase()}
+          </span>
+          <span>{userName}</span>
+          <span>⌄</span>
         </button>
       </header>
 
-      <main className="page-content requester-dashboard">
-        <div className="dashboard-heading">
-          <div>
-            <h1>My Dashboard</h1>
-            <p>Check the status of your IT support requests.</p>
-          </div>
+      <main className="requester-content">
+        <section className="requester-welcome">
+          <h1>Welcome, {userName}!</h1>
+          <p>Here's the latest on your requests.</p>
+        </section>
 
-          <button type="button" onClick={onViewAllTickets}>
-            View My Tickets
-          </button>
-        </div>
-
-        {loading && (
-          <p className="dashboard-message" role="status">
-            Loading your dashboard...
-          </p>
-        )}
+        {loading && <p>Loading your dashboard...</p>}
 
         {!loading && error && (
-          <section className="dashboard-error" role="alert">
+          <section className="requester-panel">
             <p>{error}</p>
-            <button type="button" onClick={() => void loadDashboard()}>
-              Try Again
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+            >
+              Reload Dashboard
             </button>
           </section>
         )}
 
         {!loading && !error && dashboard && (
           <>
-            <section className="dashboard-metrics" aria-label="Ticket metrics">
-              <button
-                className="dashboard-metric"
-                type="button"
-                onClick={onViewAllTickets}
-              >
-                <span>Open Tickets</span>
-                <strong>{dashboard.metrics.openTickets}</strong>
-              </button>
-
-              <button
-                className="dashboard-metric"
-                type="button"
-                onClick={onViewAllTickets}
-              >
-                <span>Waiting for You</span>
-                <strong>{dashboard.metrics.waitingForRequester}</strong>
-              </button>
-
-              <button
-                className="dashboard-metric"
-                type="button"
-                onClick={onViewAllTickets}
-              >
-                <span>Recently Updated</span>
-                <strong>{dashboard.metrics.recentlyUpdated}</strong>
-              </button>
-
-              <button
-                className="dashboard-metric"
-                type="button"
-                onClick={onViewAllTickets}
-              >
-                <span>Recently Resolved</span>
-                <strong>{dashboard.metrics.recentlyResolved}</strong>
-              </button>
+            <section className="requester-metrics">
+              {metrics.map((metric) => (
+                <button
+                  className="requester-metric"
+                  key={metric.title}
+                  type="button"
+                  onClick={onViewAllTickets}
+                >
+                  <span className="metric-title">{metric.title}</span>
+                  <strong>{metric.count}</strong>
+                  <span className="metric-link">View all</span>
+                </button>
+              ))}
             </section>
 
-            <TicketList
-              title="Recently Updated Tickets"
-              tickets={dashboard.recentTickets}
-              emptyMessage="You have no recently updated tickets."
-              onViewTicket={onViewTicket}
-            />
+            <section className="requester-dashboard-grid">
+              <section className="requester-panel recent-panel">
+                <div className="requester-panel-heading">
+                  <h2>My Recent Tickets</h2>
+                  <button type="button" onClick={onViewAllTickets}>
+                    View all
+                  </button>
+                </div>
 
-            <TicketList
-              title="Recently Resolved Tickets"
-              tickets={dashboard.recentlyResolvedTickets}
-              emptyMessage="You have no recently resolved tickets."
-              onViewTicket={onViewTicket}
-            />
+                <TicketList
+                  tickets={recentTickets}
+                  onViewTicket={onViewTicket}
+                  emptyMessage="You haven't submitted any tickets yet."
+                />
+              </section>
 
-            <TicketList
-              title="Tickets Requiring Your Attention"
-              tickets={dashboard.attentionTickets}
-              emptyMessage="You have no tickets requiring your attention."
-              onViewTicket={onViewTicket}
-            />
+              <aside className="requester-panel quick-actions">
+                <h2>Quick Actions</h2>
+
+                <button
+                  type="button"
+                  className="requester-action"
+                  onClick={onCreateTicket}
+                >
+                  <span className="requester-action-icon">+</span>
+                  <span className="requester-action-text">
+                    <strong>Create Ticket</strong>
+                    <small>Submit a new request</small>
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  className="requester-action"
+                  onClick={onViewAllTickets}
+                >
+                  <span className="requester-action-icon ticket-icon">
+                    ▣
+                  </span>
+                  <span className="requester-action-text">
+                    <strong>View My Tickets</strong>
+                    <small>Track existing requests</small>
+                  </span>
+                </button>
+              </aside>
+            </section>
+
+            <section className="requester-panel">
+              <div className="requester-panel-heading">
+                <h2>Recently Resolved</h2>
+                <button type="button" onClick={onViewAllTickets}>
+                  View all
+                </button>
+              </div>
+
+              <TicketList
+                tickets={resolvedTickets}
+                onViewTicket={onViewTicket}
+                emptyMessage="No resolved tickets found."
+              />
+            </section>
+
+            <section className="requester-panel">
+              <div className="requester-panel-heading">
+                <h2>Needs Your Attention</h2>
+                <button type="button" onClick={onViewAllTickets}>
+                  View all
+                </button>
+              </div>
+
+              <p>These tickets are waiting for your response.</p>
+
+              <TicketList
+                tickets={attentionTickets}
+                onViewTicket={onViewTicket}
+                emptyMessage="You have no tickets waiting for your response."
+              />
+            </section>
           </>
         )}
       </main>

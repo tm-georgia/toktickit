@@ -7,6 +7,7 @@ import ITStaffTicketDetail from "./ITStaffTicketDetail.js";
 import ITStaffTicketQueue from "./ITStaffTicketQueue.js";
 import AdminUserManagement from "./AdminUserManagement.js";
 import RequesterDashboard from "./RequesterDashboard.js";
+import ITStaffDashboard from "./ITStaffDashboard.js";
 
 import {
   getCategories,
@@ -27,6 +28,7 @@ type Page =
   | "login"
   | "change-password"
   | "requester-dashboard"
+  | "it-staff-dashboard"
   | "my-tickets"
   | "create-ticket"
   | "ticket-detail"
@@ -482,6 +484,13 @@ function RoleHome({
   <button
     type="button"
     className="primary-button"
+    onClick={() => onNavigate("it-staff-dashboard")}
+  >
+    My Dashboard
+  </button>
+
+  <button
+    type="button"
     onClick={() => onNavigate("it-staff-queue")}
   >
     View My Queue
@@ -495,15 +504,21 @@ function RoleHome({
     <h2>Administrator</h2>
 
     <p>
-      Manage TokTickIT users and access.
+      Monitor IT support tickets and manage TokTickIT users.
     </p>
 
     <div className="home-actions">
       <button
         type="button"
-        onClick={() =>
-          onNavigate("admin-user-management")
-        }
+        className="primary-button"
+        onClick={() => onNavigate("it-staff-dashboard")}
+      >
+        Admin Dashboard
+      </button>
+
+      <button
+        type="button"
+        onClick={() => onNavigate("admin-user-management")}
       >
         User Management
       </button>
@@ -516,7 +531,10 @@ function RoleHome({
     </div>
   );
 }
-
+type TicketQueueFilters = {
+  status?: string;
+  assignedTo?: string;
+};
 function App() {
   const [user, setUser] = useState<User | null>(null);
   const [page, setPage] = useState<Page>("login");
@@ -529,7 +547,8 @@ const [relatedSystems, setRelatedSystems] =
   useState<RelatedSystem[]>([]);
 const [referenceLoading, setReferenceLoading] =
   useState(false);
-
+const [selectedQueueFilters, setSelectedQueueFilters] =
+  useState<TicketQueueFilters>({});
   useEffect(() => {
     async function restoreSession() {
       try {
@@ -631,8 +650,23 @@ const [referenceLoading, setReferenceLoading] =
     />
   );
 }
+if (page === "requester-dashboard" && user.role === "REQUESTER") {
+  return (
+    <RequesterDashboard
+      userName={user.name}
+      onBack={() => setPage("home")}
+      onViewAllTickets={() => setPage("my-tickets")}
+      onCreateTicket={() => setPage("create-ticket")}
+      onViewTicket={(ticketId) => {
+        setSelectedTicketId(ticketId);
+        setPage("ticket-detail");
+      }}
+    />
+  );
+}
 
 if (page === "my-tickets" && user.role === "REQUESTER") {
+  
   return (
     <MyTickets
       user={user}
@@ -674,17 +708,48 @@ if (
   );
 }
 
-if (page === "it-staff-queue" && user.role === "IT_STAFF") {
+if (
+  page === "it-staff-dashboard" &&
+  (user.role === "IT_STAFF" ||
+    user.role === "ADMINISTRATOR")
+) {
   return (
-    <ITStaffTicketQueue
-      key={selectedTicketId ?? "queue"}
+    <ITStaffDashboard
       user={user}
+      onBack={() => setPage("home")}
+      onOpenQueue={(filters) => {
+  setSelectedQueueFilters(filters ?? {});
+  setPage("it-staff-queue");
+}}
       onOpenTicket={(ticketId) => {
         setSelectedTicketId(ticketId);
         setPage("it-staff-ticket-detail");
       }}
-      onBack={() => setPage("home")}
+      onCreateTicket={() => {
+        window.alert(
+          "IT Staff Create Ticket functionality will be connected later."
+        );
+      }}
     />
+  );
+}
+
+if (
+  page === "it-staff-queue" &&
+  (user.role === "IT_STAFF" ||
+    user.role === "ADMINISTRATOR")
+) {
+  return (
+    <ITStaffTicketQueue
+  key={`${selectedQueueFilters.status ?? ""}-${selectedQueueFilters.assignedTo ?? ""}`}
+  user={user}
+  initialFilters={selectedQueueFilters}
+  onOpenTicket={(ticketId) => {
+    setSelectedTicketId(ticketId);
+    setPage("it-staff-ticket-detail");
+  }}
+  onBack={() => setPage("home")}
+/>
   );
 }
 
@@ -702,7 +767,8 @@ if (
 
 if (
   page === "it-staff-ticket-detail" &&
-  user.role === "IT_STAFF" &&
+  (user.role === "IT_STAFF" ||
+    user.role === "ADMINISTRATOR") &&
   selectedTicketId !== null
 ) {
   return (
