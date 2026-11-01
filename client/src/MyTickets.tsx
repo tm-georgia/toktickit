@@ -16,19 +16,36 @@ interface MyTicketsProps {
 }
 
 type Priority = "" | "LOW" | "MEDIUM" | "HIGH";
-type Status = "" | "OPEN" | "IN_PROGRESS" | "RESOLVED" | "PENDING";
-
-type DisplayStatus =
-  | "OPEN"
-  | "IN_PROGRESS"
-  | "RESOLVED"
-  | "PENDING";
+type Status = "" | TicketListItem["currentStatus"];
 type SortOption =
   | "updatedDesc"
   | "ticketDate"
   | "ticketNumber"
   | "priority";
 
+function priorityBadgeStyle(value: "LOW" | "MEDIUM" | "HIGH") {
+  if (value === "HIGH") {
+    return {
+      backgroundColor: "#FDE8E8",
+      color: "#B91C1C",
+      border: "1px solid #F5B5B5",
+    };
+  }
+
+  if (value === "MEDIUM") {
+    return {
+      backgroundColor: "#FFF4CC",
+      color: "#92400E",
+      border: "1px solid #F3D27A",
+    };
+  }
+
+  return {
+    backgroundColor: "#EAF6EF",
+    color: "#166534",
+    border: "1px solid #B8D9C7",
+  };
+}
 export default function MyTickets({
   user,
   categories,
@@ -67,6 +84,7 @@ export default function MyTickets({
           ? Number(relatedSystemId)
           : undefined,
         priority: priority || undefined,
+        status: status || undefined,
         sort,
         page,
         pageSize,
@@ -161,84 +179,43 @@ setTotalPages(response.totalPages);
     return new Date(date).toLocaleString();
   }
 
-  function priorityLabel(value: Priority) {
-    if (value === "HIGH") return "HIGH";
-    if (value === "MEDIUM") return "MEDIUM";
-    if (value === "LOW") return "LOW";
-    return "";
-  }
+function statusLabel(value: TicketListItem["currentStatus"]) {
+  const labels: Record<TicketListItem["currentStatus"], string> = {
+    NEW: "New",
+    OPEN: "Open",
+    IN_PROGRESS: "In Progress",
+    WAITING_FOR_REQUESTER: "Waiting for Requester",
+    RESOLVED: "Resolved",
+    CLOSED: "Closed",
+    REOPENED: "Reopened",
+    CANCELLED: "Cancelled",
+  };
 
-  function priorityBadgeStyle(value: Priority) {
-    if (value === "HIGH") {
-      return {
-        backgroundColor: "#FDE8E8",
-        color: "#B91C1C",
-        border: "1px solid #F5B5B5",
-      };
-    }
-
-    if (value === "MEDIUM") {
-      return {
-        backgroundColor: "#FFF4CC",
-        color: "#92400E",
-        border: "1px solid #F3D27A",
-      };
-    }
-
-    return {
-      backgroundColor: "#EAF6EF",
-      color: "#166534",
-      border: "1px solid #B8D9C7",
-    };
-  }
-  function itPriority(value: Priority) {
-    if (value === "HIGH") return "HIGH";
-    if (value === "MEDIUM") return "HIGH";
-    if (value === "LOW") return "MEDIUM";
-    return "";
-  }
-function displayStatus(ticketId: number): DisplayStatus {
-  const statuses: DisplayStatus[] = [
-    "OPEN",
-    "IN_PROGRESS",
-    "RESOLVED",
-    "PENDING",
-  ];
-
-  return statuses[ticketId % statuses.length];
+  return labels[value];
 }
 
-function statusLabel(value: DisplayStatus) {
-  if (value === "OPEN") return "Open";
-  if (value === "IN_PROGRESS") return "In Progress";
-  if (value === "RESOLVED") return "Resolved";
-  if (value === "PENDING") return "Pending";
-
-  return value;
-}
-
-function statusBadgeStyle(value: DisplayStatus) {
-  if (value === "OPEN") {
+function statusBadgeStyle(value: TicketListItem["currentStatus"]) {
+  if (value === "CANCELLED") {
     return {
-      backgroundColor: "#EAF2FF",
-      color: "#1D4ED8",
-      border: "1px solid #BFDBFE",
+      backgroundColor: "#FDE8E8",
+      color: "#B91C1C",
+      border: "1px solid #F5B5B5",
     };
   }
 
-  if (value === "IN_PROGRESS" || value === "RESOLVED") {
-    return {
-      backgroundColor: "#EAF6EF",
-      color: "#166534",
-      border: "1px solid #B8D9C7",
-    };
-  }
-
-  if (value === "PENDING") {
+  if (value === "WAITING_FOR_REQUESTER" || value === "NEW") {
     return {
       backgroundColor: "#FFF4CC",
       color: "#92400E",
       border: "1px solid #F3D27A",
+    };
+  }
+
+  if (value === "OPEN" || value === "REOPENED") {
+    return {
+      backgroundColor: "#EAF2FF",
+      color: "#1D4ED8",
+      border: "1px solid #BFDBFE",
     };
   }
 
@@ -377,10 +354,14 @@ function statusBadgeStyle(value: DisplayStatus) {
                 }
               >
                 <option value="">All</option>
+<option value="NEW">New</option>
 <option value="OPEN">Open</option>
 <option value="IN_PROGRESS">In Progress</option>
+<option value="WAITING_FOR_REQUESTER">Waiting for Requester</option>
 <option value="RESOLVED">Resolved</option>
-<option value="PENDING">Pending</option>
+<option value="CLOSED">Closed</option>
+<option value="REOPENED">Reopened</option>
+<option value="CANCELLED">Cancelled</option>
               </select>
             </div>
 
@@ -478,7 +459,7 @@ function statusBadgeStyle(value: DisplayStatus) {
                     <th>Related System</th>
                     <th>Requested Priority</th>
                     <th>IT Priority</th>
-                    <th>Curent Status</th>
+                    <th>Current Status</th>
                     <th>Last Updated</th>
                     
                   </tr>
@@ -504,52 +485,55 @@ function statusBadgeStyle(value: DisplayStatus) {
                       <td>{ticket.relatedSystem.name}</td>
 
                       <td>
-                        <span
-                          className="ticket-badge priority-badge"
-                          style={{
-                            ...priorityBadgeStyle(itPriority(ticket.requestedPriority)),
-                            display: "inline-block",
-                            padding: "4px 10px",
-                            borderRadius: "999px",
-                            fontSize: "12px",
-                            fontWeight: 600,
-                         }}
-                        >
-                          {itPriority(ticket.requestedPriority)}
-                        </span>
-                      </td>
+  <span
+    className="ticket-badge priority-badge"
+    style={{
+      ...priorityBadgeStyle(ticket.requestedPriority),
+      display: "inline-block",
+      padding: "4px 10px",
+      borderRadius: "999px",
+      fontSize: "12px",
+      fontWeight: 600,
+    }}
+  >
+    {ticket.requestedPriority}
+  </span>
+</td>
+<td>
+  {ticket.itPriority ? (
+    <span
+      className="ticket-badge priority-badge"
+      style={{
+        ...priorityBadgeStyle(ticket.itPriority),
+        display: "inline-block",
+        padding: "4px 10px",
+        borderRadius: "999px",
+        fontSize: "12px",
+        fontWeight: 600,
+      }}
+    >
+      {ticket.itPriority}
+    </span>
+  ) : (
+    "—"
+  )}
+</td>
 
-                      <td>
-                        <span
-                         className="ticket-badge priority-badge"
-                         style={{
-                           ...priorityBadgeStyle(ticket.requestedPriority),
-                            display: "inline-block",
-                            padding: "4px 10px",
-                            borderRadius: "999px",
-                            fontSize: "12px",
-                            fontWeight: 600,
-                          }}
-                        >
-                          {priorityLabel(ticket.requestedPriority)}
-                        </span>
-                      </td>
-
-                      <td>
-                        <span
-                          className="ticket-badge status-badge"
-                          style={{
-                            ...statusBadgeStyle(displayStatus(ticket.id)),
-                            display: "inline-block",
-                            padding: "4px 10px",
-                            borderRadius: "999px",
-                            fontSize: "12px",
-                            fontWeight: 600,
-                        }}
-                    >
-                        {statusLabel(displayStatus(ticket.id))}
-                        </span>
-                    </td>
+<td>
+  <span
+    className="ticket-badge status-badge"
+    style={{
+      ...statusBadgeStyle(ticket.currentStatus),
+      display: "inline-block",
+      padding: "4px 10px",
+      borderRadius: "999px",
+      fontSize: "12px",
+      fontWeight: 600,
+    }}
+  >
+    {statusLabel(ticket.currentStatus)}
+  </span>
+</td>
 
                       <td>{formatDate(ticket.updatedAt)}</td>
 
@@ -571,15 +555,15 @@ function statusBadgeStyle(value: DisplayStatus) {
         <span
           className="ticket-badge status-badge"
           style={{
-            ...statusBadgeStyle(displayStatus(ticket.id)),
-            display: "inline-block",
-            padding: "4px 10px",
-            borderRadius: "999px",
-            fontSize: "12px",
-            fontWeight: 600,
-          }}
+  ...statusBadgeStyle(ticket.currentStatus),
+  display: "inline-block",
+  padding: "4px 10px",
+  borderRadius: "999px",
+  fontSize: "12px",
+  fontWeight: 600,
+}}
         >
-          {statusLabel(displayStatus(ticket.id))}
+          {statusLabel(ticket.currentStatus)}
         </span>
       </div>
 
@@ -591,11 +575,18 @@ function statusBadgeStyle(value: DisplayStatus) {
       </p>
 
       <p>
-        <strong>Priority:</strong>{" "}
-        <span className="ticket-badge priority-badge">
-          {ticket.requestedPriority}
-        </span>
-      </p>
+  <strong>Requested Priority:</strong>{" "}
+  <span className="ticket-badge priority-badge">
+    {ticket.requestedPriority}
+  </span>
+</p>
+
+<p>
+  <strong>IT Priority:</strong>{" "}
+  <span className="ticket-badge priority-badge">
+    {ticket.itPriority ?? "—"}
+  </span>
+</p>
 
       <p>
         <strong>Last Updated:</strong>{" "}

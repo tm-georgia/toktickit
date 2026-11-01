@@ -41,7 +41,7 @@ export interface CreatedTicket {
   description: string;
   requestedPriority: "LOW" | "MEDIUM" | "HIGH";
   itPriority: "LOW" | "MEDIUM" | "HIGH";
-  currentStatus: "NEW";
+  currentStatus: DashboardTicketStatus;
   createdAt: string;
   updatedAt: string;
   attachments: Attachment[];
@@ -224,7 +224,8 @@ export interface TicketListItem {
   summary: string;
   description: string;
   requestedPriority: "LOW" | "MEDIUM" | "HIGH";
-  currentStatus: "NEW";
+  itPriority: "LOW" | "MEDIUM" | "HIGH" | null;
+  currentStatus: DashboardTicketStatus;
   createdAt: string;
   updatedAt: string;
   requester: DevelopmentRequester;
@@ -268,7 +269,7 @@ export interface GetTicketsParams {
   categoryId?: number;
   relatedSystemId?: number;
   priority?: "LOW" | "MEDIUM" | "HIGH";
-  status?: "NEW";
+  status?: DashboardTicketStatus;
   sort?: "updatedDesc" | "ticketDate" | "ticketNumber" | "priority";
   page?: number;
   pageSize?: 10 | 20 | 50;

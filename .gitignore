@@ -1,17 +1,33 @@
-# dependencies
+﻿# Dependencies
 node_modules/
-# env & secrets
+
+# Environment variables and secrets
 .env
-*.env
+.env.*
 !.env.example
-# build output
+!.env.*.example
+
+# Build output
 dist/
 build/
-# prisma
-server/prisma/*.db
-# logs & OS
-*.log
-.DS_Store
 
-server/uploads/
+# Test output
+coverage/
 test-results/
+playwright-report/
+blob-report/
+
+# Prisma local databases
+server/prisma/*.db
+server/prisma/*.db-journal
+
+# Runtime uploads
+server/uploads/
+
+# Logs
+*.log
+
+# Operating system files
+.DS_Store
+Thumbs.db
+desktop.ini
