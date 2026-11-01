@@ -90,14 +90,11 @@ project before marking the plan complete.
 
 ## 5. UI Component Tests
 
-Planned coverage:
-- `StaffDashboard.test.tsx`
-- `RequesterDashboard.test.tsx`
-- `ActionsTaken.test.tsx`
-- `TicketWorkflow.test.tsx`
+The implemented frontend test files are:
 
-These names are proposed. Place the tests according to the existing client test
-conventions and update this document to the real paths.
+- `client/tests/lab-04/ITStaffDashboard.test.tsx`
+- `client/tests/lab-04/RequesterDashboard.test.tsx`
+- `client/tests/lab-04/ActionsTakenAndWorkflow.test.tsx`
 
 Tests should verify:
 - Loading, success, empty, and error states.
